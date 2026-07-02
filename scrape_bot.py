@@ -8,8 +8,9 @@ import email.utils
 def tu_dong_lay_tin_tai_chinh():
     # 1. Cấu hình các nguồn RSS và tham số (Chỉ giữ lại VnEconomy và VnExpress)
     cac_nguon_rss = {
-        "VnEconomy": "https://vneconomy.vn/rss/tai-chinh-ngan-hang.rss",
-        "VnExpress": "https://vnexpress.net/rss/kinh-doanh.rss"
+        "VnEconomy": "https://vneconomy.vn/tai-chinh-ngan-hang.rss",
+        "VietStock": "https://vietstock.vn/tai-chinh.rss",
+        "CafeF": "https://cafef.vn/thi-truong-chung-khoan.rss"
     }
     tin_tuc = []
     cac_link_da_lay = set()  # Tập hợp giúp kiểm tra và loại bỏ tin trùng lặp hiệu quả (O(1))
@@ -21,7 +22,7 @@ def tu_dong_lay_tin_tai_chinh():
 
     # 2. Vòng lặp quét qua từng nguồn RSS trong cấu hình
     for ten_nguon, rss_url in cac_nguon_rss.items():
-        feed = feedparser.parse(rss_url)
+        feed = feedparser.parse(rss_url, agent="Mozilla/5.0")
         
         # Kiểm tra an toàn xem feed có dữ liệu không
         if not getattr(feed, 'entries', None):
@@ -82,6 +83,10 @@ if __name__ == "__main__":
 
     # Kiểm tra an toàn trước khi in
     if danh_sach_tin_tuc:
+        with open("tin_tuc_cuoi_ngay.json", "w", encoding="utf-8") as f:
+            json.dump(danh_sach_tin_tuc, f, ensure_ascii=False, indent=4)
+        print("Đã lưu sản phẩm cuối ngày vào file: tin_tuc_cuoi_ngay.json")
+
         print(f"\nĐã thu thập được tổng cộng {len(danh_sach_tin_tuc)} tin mới.\n")
         print("================ DANH SÁCH TIN TỨC ================")
         
