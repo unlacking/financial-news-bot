@@ -4,16 +4,19 @@ from datetime import datetime, timezone, timedelta
 import feedparser
 import json
 import email.utils
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def tu_dong_lay_tin_tai_chinh():
-    # 1. Cấu hình các nguồn RSS và tham số (Chỉ giữ lại VnEconomy và VnExpress)
+    # 1. Cấu hình các nguồn RSS và tham số (VnEconomy và Cafef)
     cac_nguon_rss = {
-        "VnEconomy": "https://vneconomy.vn/tai-chinh-ngan-hang.rss",
-        "VietStock": "https://vietstock.vn/tai-chinh.rss",
-        "CafeF": "https://cafef.vn/thi-truong-chung-khoan.rss"
+        "CafeF": os.getenv("URL_CAFEF"),
+        "VnEconomy": os.getenv("URL_VNECONOMY")
     }
     tin_tuc = []
-    cac_link_da_lay = set()  # Tập hợp giúp kiểm tra và loại bỏ tin trùng lặp hiệu quả (O(1))
+    cac_link_da_lay = set()  # Tập hợp giúp kiểm tra và loại bỏ tin trùng lặp
     so_luong_tin_muon_lay = 5  # Số lượng tin tối đa muốn lấy cho MỖI nguồn
     mui_gio_vn = timezone(timedelta(hours=7))
     hom_nay_vn = datetime.now(mui_gio_vn).date()
@@ -39,7 +42,7 @@ def tu_dong_lay_tin_tai_chinh():
             link_bai_bao = getattr(entry, 'link', '').strip()
             published_raw = getattr(entry, 'published', getattr(entry, 'pubDate', None))
 
-            # Nếu bài viết không có link (dữ liệu rác), bỏ qua luôn
+            # Nếu bài viết không có link (dữ liệu rác) bỏ qua
             if not link_bai_bao:
                 continue
 
@@ -54,7 +57,7 @@ def tu_dong_lay_tin_tai_chinh():
                 # Không crash chương trình khi gặp bài báo lỗi định dạng ngày tháng
                 continue
 
-            # ĐIỀU KIỆN: Phải là tin hôm nay VÀ link bài viết chưa từng được lấy
+            # Phải là tin hôm nay VÀ link bài viết chưa từng được lấy
             if ngay_xuat_ban_vn == hom_nay_vn and link_bai_bao not in cac_link_da_lay:
                 summary_clean = getattr(entry, 'summary', '')
                 
@@ -68,16 +71,16 @@ def tu_dong_lay_tin_tai_chinh():
                     "source": ten_nguon,
                     "title": getattr(entry, 'title', 'Không rõ tiêu đề'),
                     "link": link_bai_bao,
-                    "published": ngay_xuat_ban_vn.isoformat(), # Chuyển thành String "YYYY-MM-DD" để an toàn cho JSON
+                    "published": ngay_xuat_ban_vn.isoformat(), # Chuyển thành String "YYYY-MM-DD" cho JSON
                     "summary": summary_clean
                 })
                 
-                cac_link_da_lay.add(link_bai_bao) # Đánh dấu bài viết này đã lấy vào tập hợp set()
+                cac_link_da_lay.add(link_bai_bao) # Đánh dấu bài viết này đã lấy
                 so_luong_tin_hien_tai += 1
                 
     return tin_tuc
 
-# --- "NGƯỜI GÁC CỔNG" __name__ = "__main__" ---
+# 3. Chạy hàm chính và lưu kết quả vào file JSON
 if __name__ == "__main__":
     danh_sach_tin_tuc = tu_dong_lay_tin_tai_chinh()
 
