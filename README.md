@@ -39,7 +39,7 @@ Make sure you have **Python 3.11+** and **Git** installed on your machine.
 
 ```bash
 # Clone the repository
-git clone [https://github.com/YOUR-USERNAME/financial-news-bot.git](https://github.com/YOUR-USERNAME/financial-news-bot.git)
+git clone [https://github.com/unlacking/financial-news-bot.git](https://github.com/unlacking/financial-news-bot.git)
 cd financial-news-bot
 
 # Create and activate virtual environment
