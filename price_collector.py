@@ -11,9 +11,7 @@ from vnstock import Market, Reference
 load_dotenv()
 
 def get_all_market_tickers():
-    """
-    Dynamically fetches all active stock symbols currently listed on the Vietnamese market.
-    """
+    "Dynamically fetches all active stock symbols currently listed on the Vietnamese market."
     try:
         ref = Reference()
         df_symbols = ref.equity.list()
@@ -93,10 +91,7 @@ def collect_prices(ticker_list=None):
     return price_data
 
 def save_data_locally(results: dict):
-    """
-    Saves the results dictionary into a dated subfolder anchored explicitly to the script directory.
-    Example path: stock_data/2026-07-03/stock_prices.json
-    """
+    "Saves the results dictionary into a dated subfolder anchored explicitly to the script directory."
     # Force absolute routing by mapping paths down from where the script is hosted
     script_dir = Path(__file__).resolve().parent
     base_dir = script_dir / "stock_data"
