@@ -2,3 +2,5 @@
 __pycache__/
 .venv311/
 .vscode/
+venv/
+.env.example
