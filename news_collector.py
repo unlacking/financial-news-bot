@@ -40,7 +40,7 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
     # Iterate through each configured news publisher feed
     for source_name, rss_url in rss_sources.items():
         if not rss_url:
-            print(f"⚠ Warning: Environment variable for {source_name} is not set!")
+            print(f"Warning: Environment variable for {source_name} is not set!")
             continue
 
         # Spoof a realistic web browser header to bypass basic anti-bot firewall restrictions
@@ -49,7 +49,7 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
         
         # Guard clause to check the validity of the returned RSS data payload
         if not getattr(feed, 'entries', None):
-            print(f"⚠ Warning: Cannot connect or RSS link for {source_name} is broken/empty!")
+            print(f"Warning: Cannot connect or RSS link for {source_name} is broken/empty!")
             continue
 
         current_news_count = 0
@@ -97,68 +97,78 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
                 
     return news
 
-# 2. Execution Runtime Layer & Disk I/O Aggregator (Prevents duplicate files on storage)
+
+def save_news_locally(news_list):
+    """
+    Groups inbound scraped items by publisher and commits incremental patch 
+    matrix operations to individual daily JSON files inside a local data folder.
+    """
+    if not news_list:
+        print("\nNo new articles to save within the selected timeframe.")
+        return
+
+    # Resolve path to anchor the data folder inside the core project architecture
+    base_dir = os.path.join(current_script_dir, "news_data")
+    
+    timezone_vn = timezone(timedelta(hours=7))
+    date_str = datetime.now(timezone_vn).strftime("%Y-%m-%d")
+    
+    # Build storage subdirectory dynamically if missing
+    os.makedirs(base_dir, exist_ok=True)
+    print(f"Target system base directory anchored at: {base_dir}")
+    
+    # Group inbound scraped items by their primary publisher tag
+    grouped_news = {}
+    for article in news_list:
+        publisher = article["source"]
+        grouped_news.setdefault(publisher, []).append(article)
+
+    # Execute incremental patch matrix operations per publisher file
+    for publisher, incoming_articles in grouped_news.items():
+        # Unified daily target naming schema: news_data/Publisher_YYYY-MM-DD.json
+        filename = f"{publisher}_{date_str}.json"
+        full_file_path = os.path.join(base_dir, filename)
+        
+        existing_articles = []
+        existing_links = set()
+        
+        # STEP 1: If the archival track exists, read it to index unique hyperlinks already committed to disk
+        if os.path.exists(full_file_path):
+            try:
+                with open(full_file_path, "r", encoding="utf-8") as f:
+                    existing_articles = json.load(f)
+                    existing_links = {art["link"] for art in existing_articles if "link" in art}
+                print(f"Loaded {len(existing_articles)} existing articles from {filename}")
+            except (json.JSONDecodeError, IOError) as read_err:
+                print(f"Warning: Could not parse existing file {filename}. Initializing fresh. Error: {read_err}")
+        
+        # STEP 2: Compare incoming data against indexed disk record array, filtering out collisions
+        new_additions_count = 0
+        for article in incoming_articles:
+            if article["link"] not in existing_links:
+                existing_articles.append(article)
+                existing_links.add(article["link"])
+                new_additions_count += 1
+        
+        # STEP 3: Commit changes to data tracking manifest only if brand new items were verified
+        if new_additions_count > 0:
+            try:
+                with open(full_file_path, "w", encoding="utf-8") as f:
+                    json.dump(existing_articles, f, ensure_ascii=False, indent=4)
+                print(f"Successfully updated {filename}: Added {new_additions_count} new articles. Total: {len(existing_articles)}.")
+            except IOError as write_err:
+                print(f"Error writing updates to file {filename}: {write_err}")
+        else:
+            print(f"No new unique articles found for {publisher}. File {filename} is up to date.")
+            
+    print("\nIncremental update cycle complete.")
+
+
+# 3. Execution Runtime Layer & Disk I/O Aggregator 
 if __name__ == "__main__":
     # Test execution parameters to fetch articles over the past 24 hours
     test_timeframe = timedelta(days=1)
     test_amount = 5
+    
     news_list = collect_news(news_amount=test_amount, timeframe=test_timeframe)
-
-    if news_list:
-        # Resolve path to anchor the data folder inside the core project architecture
-        base_dir = os.path.join(current_script_dir, "news_data")
-        
-        timezone_vn = timezone(timedelta(hours=7))
-        date_str = datetime.now(timezone_vn).strftime("%Y-%m-%d")
-        
-        # Build storage subdirectory dynamically if missing
-        os.makedirs(base_dir, exist_ok=True)
-        print(f"Target system base directory anchored at: {base_dir}")
-        
-        # Group inbound scraped items by their primary publisher tag
-        grouped_news = {}
-        for article in news_list:
-            publisher = article["source"]
-            grouped_news.setdefault(publisher, []).append(article)
-
-        # Execute incremental patch matrix operations per publisher file
-        for publisher, incoming_articles in grouped_news.items():
-            # Unified daily target naming schema: news_data/Publisher_YYYY-MM-DD.json
-            filename = f"{publisher}_{date_str}.json"
-            full_file_path = os.path.join(base_dir, filename)
-            
-            existing_articles = []
-            existing_links = set()
-            
-            # STEP 1: If the archival track exists, read it to index unique hyperlinks already committed to disk
-            if os.path.exists(full_file_path):
-                try:
-                    with open(full_file_path, "r", encoding="utf-8") as f:
-                        existing_articles = json.load(f)
-                        existing_links = {art["link"] for art in existing_articles if "link" in art}
-                    print(f"Loaded {len(existing_articles)} existing articles from {filename}")
-                except (json.JSONDecodeError, IOError) as read_err:
-                    print(f"⚠ Warning: Could not parse existing file {filename}. Initializing fresh. Error: {read_err}")
-            
-            # STEP 2: Compare incoming data against indexed disk record array, filtering out collisions
-            new_additions_count = 0
-            for article in incoming_articles:
-                if article["link"] not in existing_links:
-                    existing_articles.append(article)
-                    existing_links.add(article["link"])
-                    new_additions_count += 1
-            
-            # STEP 3: Commit changes to data tracking manifest only if brand new items were verified
-            if new_additions_count > 0:
-                try:
-                    with open(full_file_path, "w", encoding="utf-8") as f:
-                        json.dump(existing_articles, f, ensure_ascii=False, indent=4)
-                    print(f"Successfully updated {filename}: Added {new_additions_count} new articles. Total: {len(existing_articles)}.")
-                except IOError as write_err:
-                    print(f"⚠ Error writing updates to file {filename}: {write_err}")
-            else:
-                print(f"-> No new unique articles found for {publisher}. File {filename} is up to date.")
-                
-        print("\nIncremental update cycle complete.")
-    else:
-        print("\nNo new articles found within the selected timeframe.")
+    save_news_locally(news_list)
