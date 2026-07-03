@@ -26,7 +26,7 @@ def collect_prices(ticker_list=None):
             df = market.equity(symbol=ticker).ohlcv(count=5)
             
             if df.empty or len(df) < 2:
-                print(f"⚠ Warning: Not enough historical data found for ticker: {ticker}")
+                print(f"Warning: Not enough historical data found for ticker: {ticker}")
                 continue
             
             # Ensure the records are ordered chronologically (oldest to newest)
@@ -53,10 +53,10 @@ def collect_prices(ticker_list=None):
                 "price": latest_price,
                 "percentage_change": pct_change
             }
-            print(f"✓ Successfully fetched {ticker}: Price = {latest_price}, Change = {pct_change}%")
+            print(f"Successfully fetched {ticker}: Price = {latest_price}, Change = {pct_change}%")
 
         except Exception as e:
-            print(f"❌ Error: Failed to process ticker {ticker}: {e}")
+            print(f"Error: Failed to process ticker {ticker}: {e}")
             continue
 
     return price_data

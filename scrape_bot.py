@@ -29,7 +29,7 @@ def Scrape():
         
         # Safety check to see if the feed has valid entries
         if not getattr(feed, 'entries', None):
-            print(f"⚠ Warning: Cannot connect or RSS link for {source_name} is broken/empty!")
+            print(f"Warning: Cannot connect or RSS link for {source_name} is broken/empty!")
             continue
 
         current_news_count = 0
@@ -91,7 +91,7 @@ if __name__ == "__main__":
         
         with open("tin_tuc_cuoi_ngay.json", "w", encoding="utf-8") as f:
             f.write(json_string)
-        print("💾 Successfully saved today's product to file: tin_tuc_cuoi_ngay.json")
+        print("Successfully saved today's product to file: tin_tuc_cuoi_ngay.json")
 
         print(f"\nCollected a total of {len(news_list)} new articles.\n")
         print("================ NEWS ARTICLES LIST ================")
