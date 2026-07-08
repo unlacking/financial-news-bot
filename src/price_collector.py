@@ -85,7 +85,7 @@ def collect_prices(ticker_list=None):
                     retries += 1
                     continue # Retry the exact same ticker again
                 else:
-                    # It's a normal error (like your delisted DDM/AGF stocks), skip it cleanly
+                    # It's a normal error (like delisted DDM/AGF stocks), skip it cleanly
                     break
 
     return price_data
