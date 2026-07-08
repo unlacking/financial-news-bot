@@ -51,25 +51,26 @@ def insert_json_to_table(local_file_path, table_name):
         # ---------------------------------------------------------
         # DATABASE SCHEMA ALIGNMENT LAYER
         # ---------------------------------------------------------
-        # Phase 1: Financial News Table Realignment
+        # Phase 1: Financial News Table Realignment & In-Context Summarization
         if table_name == NEWS_TABLE:
-            # Detect source context based on file name if not already in JSON
             inferred_source = "CafeF" if "CafeF" in local_path.name else "VnEconomy"
             
+            # Import our standalone summarizer function
+            from src.summarizer import generate_summary
+            
             for row in data:
-                # 1. Map 'published' to 'published_at'
                 if "published" in row:
                     row["published_at"] = row.pop("published")
-                
-                # 2. Map 'url' to 'link' if scraper outputs it as url
                 if "url" in row:
                     row["link"] = row.pop("url")
-                
-                # 3. Handle 'source' if it doesn't exist explicitly in your row data
                 if "source" not in row:
                     row["source"] = inferred_source
                 
-                # 4. Strip keys not present in the friend's schema cache
+                # Use our new cleanly separated function
+                if "body" in row and (not row.get("summary") or len(row["summary"]) < 10):
+                    print(f"Generating In-Context AI Summary for: {row.get('title', 'Untitled')[:30]}...")
+                    row["summary"] = generate_summary(row.get('title', ''), row.get('body', ''))
+
                 allowed_news_columns = {"source", "title", "link", "published_at", "summary"}
                 for key in list(row.keys()):
                     if key not in allowed_news_columns:
