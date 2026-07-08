@@ -2,9 +2,9 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 
-from news_collector import collect_news, save_news_locally
-from price_collector import get_all_market_tickers, collect_prices, save_data_locally as save_prices
-from supabase_helper import upload_to_supabase
+from src.news_collector import collect_news, save_news_locally
+from src.price_collector import get_all_market_tickers, collect_prices, save_data_locally as save_prices
+from src.supabase_helper import upload_to_supabase
 
 def run_pipeline():
     print(f"\n====================================================")
