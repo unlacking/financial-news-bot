@@ -51,12 +51,12 @@ def insert_json_to_table(local_file_path, table_name):
         # ---------------------------------------------------------
         # DATABASE SCHEMA ALIGNMENT LAYER
         # ---------------------------------------------------------
-        # Phase 1: Financial News Table Realignment & In-Context Summarization
+        # Phase 1: Financial News Table Realignment & Enriched Analysis
         if table_name == NEWS_TABLE:
             inferred_source = "CafeF" if "CafeF" in local_path.name else "VnEconomy"
             
-            # Import our standalone summarizer function
-            from src.summarizer import generate_summary
+            # Import our newly unified analyzer function
+            from src.ai_processor import analyze_article
             
             for row in data:
                 if "published" in row:
@@ -66,12 +66,24 @@ def insert_json_to_table(local_file_path, table_name):
                 if "source" not in row:
                     row["source"] = inferred_source
                 
-                # Use our new cleanly separated function
+                # If body exists and data attributes are unpopulated, process them now
                 if "body" in row and (not row.get("summary") or len(row["summary"]) < 10):
-                    print(f"Generating In-Context AI Summary for: {row.get('title', 'Untitled')[:30]}...")
-                    row["summary"] = generate_summary(row.get('title', ''), row.get('body', ''))
+                    print(f"Running enriched AI analysis for: {row.get('title', 'Untitled')[:30]}...")
+                    
+                    # Compute all 4 values in a single high-efficiency API call
+                    analysis = analyze_article(row.get('title', ''), row.get('body', ''))
+                    
+                    # Safely map attributes to the dataset row
+                    row["summary"] = analysis.get("summary")
+                    row["sentiment"] = analysis.get("sentiment")
+                    row["related_tickers"] = analysis.get("related_tickers")
+                    row["importance"] = analysis.get("importance")
 
-                allowed_news_columns = {"source", "title", "link", "published_at", "summary"}
+                # Define the complete structured column profile accepted by Supabase
+                allowed_news_columns = {
+                    "source", "title", "link", "published_at", 
+                    "summary", "sentiment", "related_tickers", "importance"
+                }
                 for key in list(row.keys()):
                     if key not in allowed_news_columns:
                         row.pop(key)
