@@ -1,5 +1,3 @@
-print("Check")
-
 from datetime import datetime, timezone, timedelta
 import feedparser
 import json
