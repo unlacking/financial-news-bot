@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import httpx
 from urllib.parse import urlparse
 from datetime import datetime
-from ai_processor import analyze_article
+from src.ai_processor import analyze_article
 
 load_dotenv()
 
