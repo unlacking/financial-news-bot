@@ -4,30 +4,48 @@ import time
 import random
 from typing import List
 from pydantic import BaseModel, Field, field_validator
+from src.price_collector import get_all_market_tickers
 from google import genai
 from google.genai.errors import APIError
 
-# 1. Define schema matching the exact datatypes of the gemini_responses table
+# Cache the official active 3-character ticker pool once at compilation time
+try:
+    VALID_VIETNAMESE_TICKERS = set(get_all_market_tickers())
+except Exception:
+    # Fallback to standard high-cap anchors if the network collector goes down
+    VALID_VIETNAMESE_TICKERS = {"VCB", "FPT", "HPG", "VNM", "VIC", "VRE", "MSN"}
+
 class FinancialAnalysisSchema(BaseModel):
-    summary: str = Field(
-        description="A comprehensive 2-3 sentence summary of the article strictly in Vietnamese."
-    )
-    sentiment: str = Field(
-        description="The market sentiment direction of the news toward the target tickers (e.g., 'Positive', 'Negative', 'Neutral')."
-    )
-    related_tickers: List[str] = Field(
-        description="List of stock tickers explicitly mentioned or heavily impacted (e.g., ['PNJ', 'FPT'])."
-    )
-    importance_score: int = Field(
-        description="The market-moving significance of this article graded as an integer score on a scale from 1 (lowest) to 5 (highest)."
-    )
+    summary: str = Field(description="A comprehensive 2-3 sentence summary...")
+    sentiment: str = Field(description="The market sentiment direction...")
+    related_tickers: List[str] = Field(description="List of stock tickers...")
+    importance_score: int = Field(description="Market significance score...")
+
+    @field_validator("related_tickers")
+    @classmethod
+    def filter_and_validate_tickers(cls, tickers: List[str]) -> List[str]:
+        """
+        Intersects the AI-generated list against live listed market assets.
+        Forces formatting compliance and eliminates out-of-bounds hallucinations.
+        """
+        # 1. Clean format string structures (Force Uppercase & strip whitespace)
+        cleaned_tickers = [str(t).strip().upper() for t in tickers]
+        
+        # 2. Perform a Set-Intersection to extract ONLY valid listed market assets
+        validated_pool = list(set(cleaned_tickers).intersection(VALID_VIETNAMESE_TICKERS))
+        
+        # 3. Log a warning terminal note if tickers were filtered out
+        dropped = set(cleaned_tickers) - set(validated_pool)
+        if dropped:
+            print(f"Validation Note: Dropped unlisted/invalid tickers: {dropped}")
+            
+        return validated_pool
 
     @field_validator("importance_score")
     @classmethod
     def validate_score(cls, value: int) -> int:
-        # Enforce that the integer fits gracefully within standard ratings
         if not (1 <= value <= 5):
-            return 3  # Default to neutral/medium importance if out of bounds
+            return 3
         return value
 
 
