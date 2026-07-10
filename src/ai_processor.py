@@ -19,7 +19,10 @@ class FinancialAnalysisSchema(BaseModel):
     summary: str = Field(description="A comprehensive 2-3 sentence summary...")
     sentiment: str = Field(description="The market sentiment direction...")
     related_tickers: List[str] = Field(description="List of stock tickers...")
-    importance_score: int = Field(description="Market significance score...")
+    importance_score: int = Field(
+        ge=1, le=5, 
+        description="Market importance rating from 1 (very low impact) to 5 (massive market mover/systemic news)."
+    )
 
     @field_validator("related_tickers")
     @classmethod
