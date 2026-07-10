@@ -22,19 +22,21 @@ def run_pipeline():
         news_results = collect_news(news_amount=5)
         save_news_locally(news_results)
         
-        cafef_path = os.path.join("news_data", f"CafeF_{date_str}.json")
-        vneconomy_path = os.path.join("news_data", f"VnEconomy_{date_str}.json")
+        cafef_path = os.path.join("src", "news_data", f"CafeF_{date_str}.json")
+        vneconomy_path = os.path.join("src", "news_data", f"VnEconomy_{date_str}.json")
 
         # Only attempt database insertion if the file was actually generated/updated
         if os.path.exists(cafef_path):
+            print(f"Syncing local cache data to cloud for CafeF...")
             insert_json_to_table(local_file_path=cafef_path, table_name=NEWS_TABLE)
         else:
-            print("CafeF local file not found or unchanged today. Skipping upload.")
+            print("CafeF local file not found. Skipping.")
 
         if os.path.exists(vneconomy_path):
+            print(f"Syncing local cache data to cloud for VnEconomy...")
             insert_json_to_table(local_file_path=vneconomy_path, table_name=NEWS_TABLE)
         else:
-            print("VnEconomy local file not found or unchanged today. Skipping upload.")
+            print("VnEconomy local file not found. Skipping.")
 
     except Exception as e:
         print(f"Error executing News Phase: {e}")
@@ -46,7 +48,7 @@ def run_pipeline():
         save_prices(price_results)
         
         insert_json_to_table(
-            local_file_path=os.path.join("src", "stock_data", date_str, "stock_prices.json"),
+            local_file_path=os.path.join("stock_data", date_str, "stock_prices.json"),
             table_name=STOCKS_TABLE
         )
     except Exception as e:

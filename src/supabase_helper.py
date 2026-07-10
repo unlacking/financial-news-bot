@@ -16,38 +16,65 @@ NEWS_TABLE: str = os.getenv("SUPABASE_NEWS_TABLE", "financial_news")
 STOCKS_TABLE: str = os.getenv("SUPABASE_STOCKS_TABLE", "stock_prices")
 GEMINI_TABLE: str = os.getenv("SUPABASE_GEMINI_TABLE", "gemini_responses")
 
-def process_news_batch(data: list, title_field: str, body_field: str) -> list:
+def process_news_batch(data: list, local_path_name: str) -> tuple:
     """
     Processes articles in explicit sub-batches to guarantee we stay 
     safely beneath the 15 Requests Per Minute (RPM) threshold.
+    Returns a tuple of (news_rows, gemini_rows).
     """
+    from src.ai_processor import analyze_article
+
+    news_rows_to_insert = []
     gemini_rows_to_insert = []
-    # Set sub-batch size safely below the 15 RPM ceiling
+    
     BATCH_SIZE = 10  
-    COOLDOWN_PERIOD = 65  # Seconds to let the RPM window fully reset
+    COOLDOWN_PERIOD = 65  
     
     for i in range(0, len(data), BATCH_SIZE):
         batch = data[i:i + BATCH_SIZE]
         print(f"Processing sub-batch {i // BATCH_SIZE + 1} ({len(batch)} articles)...")
         
         for row in batch:
-            title = row.get(title_field, "Untitled")
-            body = row.get(body_field, "")
+            # 1. Format the standard news data row
+            inferred_source = "CafeF" if "CafeF" in local_path_name else "VnEconomy"
+            published_at = row.get("published") or row.get("published_at")
+            link = row.get("url") or row.get("link")
+            title = row.get("title", "Untitled")
+            body = row.get("body", "")
+
+            news_row = {
+                "source": row.get("source", inferred_source),
+                "title": title,
+                "link": link,
+                "published_at": published_at,
+                "summary": row.get("summary")
+            }
+            news_rows_to_insert.append(news_row)
             
-            # (Your existing extraction & analyze_article logic runs here)
-            analysis = analyze_article(title, body)
+            # 2. Generate the separate Gemini Analysis payload
+            context_text = body if (body and len(body.strip()) > 10) else title
             
-            gemini_rows_to_insert.append(analysis)
-            
-            # Short intra-batch pacing to not look like a sudden burst
+            if context_text and len(context_text.strip()) > 2:
+                print(f"Analyzing and queuing Gemini response for: {title[:30]}...")
+                analysis = analyze_article(title, body if body else "No body text available.")
+                
+                gemini_row = {
+                    "prompt_input": f"Title: {title}\nBody: {body[:200] if body else 'None'}...",
+                    "model_name": "gemini-2.5-flash",
+                    "summary": analysis.get("summary"),
+                    "sentiment": analysis.get("sentiment"),
+                    "related_tickers": analysis.get("related_tickers"),
+                    "importance_score": analysis.get("importance_score")
+                }
+                gemini_rows_to_insert.append(gemini_row)
+
             time.sleep(1.5) 
         
-        # If there are more articles left after this batch, force a hard reset sleep
         if i + BATCH_SIZE < len(data):
             print(f"Approaching RPM ceiling. Enforcement cooling down for {COOLDOWN_PERIOD}s...")
             time.sleep(COOLDOWN_PERIOD)
             
-    return gemini_rows_to_insert
+    return news_rows_to_insert, gemini_rows_to_insert
 
 def insert_json_to_table(local_file_path, table_name):
     """Reads local JSON data, reshapes it to match database columns, and upserts rows."""
