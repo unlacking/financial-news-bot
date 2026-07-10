@@ -46,7 +46,7 @@ def run_pipeline():
         save_prices(price_results)
         
         insert_json_to_table(
-            local_file_path=os.path.join("stock_data", date_str, "stock_prices.json"),
+            local_file_path=os.path.join("src", "stock_data", date_str, "stock_prices.json"),
             table_name=STOCKS_TABLE
         )
     except Exception as e:

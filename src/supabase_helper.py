@@ -128,6 +128,12 @@ def insert_json_to_table(local_file_path, table_name):
 
         # Phase 2: Stock Prices Table Realignment
         elif table_name == STOCKS_TABLE:
+            # Re-verify that the incoming dictionary keys are handled as a clean list of rows
+            if isinstance(data, dict):
+                # If it's a legacy single-dictionary fallback object, wrap it into a list
+                data = [data]
+                
+            # Establish the runtime validation timestamp
             today_str = datetime.now().strftime("%Y-%m-%d")
             for row in data:
                 if "close" in row:
