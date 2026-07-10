@@ -7,9 +7,10 @@ import httpx
 from urllib.parse import urlparse
 from datetime import datetime
 from src.ai_processor import analyze_article
+from dotenv import load_dotenv
 
 load_dotenv()
-
+GEMINI_VERSION = os.getenv("GEMINI_VERSION")
 URL: str = os.getenv("SUPABASE_URL")
 KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 NEWS_TABLE: str = os.getenv("SUPABASE_NEWS_TABLE", "financial_news")
@@ -60,7 +61,7 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
                 
                 gemini_row = {
                     "prompt_input": f"Title: {title}\nBody: {body[:200] if body else 'None'}...",
-                    "model_name": "gemini-2.5-flash",
+                    "model_name": GEMINI_VERSION,
                     "summary": analysis.get("summary"),
                     "sentiment": analysis.get("sentiment"),
                     "related_tickers": analysis.get("related_tickers"),

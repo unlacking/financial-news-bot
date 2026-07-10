@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field, field_validator
 from src.price_collector import get_all_market_tickers
 from google import genai
 from google.genai.errors import APIError
+from dotenv import load_dotenv
+
+load_dotenv()
+GEMINI_VERSION = os.getenv("GEMINI_VERSION")
 
 # Cache the official active 3-character ticker pool once at compilation time
 try:
@@ -60,7 +64,7 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model=GEMINI_VERSION,
                 contents=prompt,
                 config={
                     "response_mime_type": "application/json",
