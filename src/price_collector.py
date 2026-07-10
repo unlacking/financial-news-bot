@@ -29,24 +29,22 @@ def collect_prices(ticker_list=None):
     if ticker_list is None:
         ticker_list = ["VCB", "FPT", "HPG", "VNM"]
 
-    price_data = {}
+    price_data = []
     print(f"Starting automated stock price collection for: {len(ticker_list)} tickers...")
 
     market = Market()
     has_api_key = os.getenv("VNSTOCK_API_KEY") is not None
+    today_str = datetime.now().strftime("%Y-%m-%d")
 
     for index, ticker in enumerate(ticker_list, 1):
-        # We use a while loop for a single ticker to allow retrying if rate limited
         retries = 0
         while retries < 3:
             try:
-                # Bumping base safety slightly to 1.5s for Community tier (40 reqs/min max)
                 time.sleep(1.5 if has_api_key else 3.5)
-                
                 df = market.equity(symbol=ticker).ohlcv(count=5)
                 
                 if df.empty or len(df) < 2:
-                    break # Not enough data, break out of retry loop to move to next ticker
+                    break 
                 
                 if 'time' in df.columns:
                     df = df.sort_values(by='time', ascending=True)
@@ -66,26 +64,27 @@ def collect_prices(ticker_list=None):
                 else:
                     pct_change = 0.0
 
-                price_data[ticker] = {
+                # --- APPEND A FLAT DATABASE-READY ROW ---
+                price_data.append({
+                    "ticker": ticker,
                     "price": latest_price,
-                    "percentage_change": round(pct_change, 2)
-                }
+                    "percentage_change": round(pct_change, 2),
+                    "collected_date": today_str
+                })
                 
                 if index % 20 == 0 or index == len(ticker_list):
                     print(f"Progress: Profiled {index}/{len(ticker_list)} stocks...")
                 
-                break # Successfully processed, exit the retry loop for this ticker
+                break 
 
             except Exception as e:
                 error_msg = str(e)
-                # Check if the error print or response contains the rate limit keyword
                 if "GIỚI HẠN API ĐÃ ĐẠT TỐI ĐA" in error_msg or "Rate Limit Exceeded" in error_msg:
                     print(f"\n[RATE LIMIT HIT] Smart-pausing for 60 seconds before retrying {ticker}...")
                     time.sleep(60)
                     retries += 1
-                    continue # Retry the exact same ticker again
+                    continue 
                 else:
-                    # It's a normal error (like delisted DDM/AGF stocks), skip it cleanly
                     break
 
     return price_data
