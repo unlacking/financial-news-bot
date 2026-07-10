@@ -11,6 +11,13 @@ current_script_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(current_script_dir, ".env")
 load_dotenv(dotenv_path=env_path)
 
+def clean_html(raw_html):
+    if not raw_html:
+        return ""
+    clean_text = re.sub(r'<a[^>]*>.*?</a>', '', raw_html)
+    clean_text = re.sub(r'<[^>]+>', '', clean_text)
+    return clean_text.strip()
+
 def collect_news(news_amount=5, timeframe=timedelta(days=1)):
     """
     Scrapes financial news from configured RSS feeds.
@@ -21,7 +28,8 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
     # Configure RSS sources using environment variables loaded from .env
     rss_sources = {
         "CafeF": os.getenv("URL_CAFEF"),
-        "VnEconomy": os.getenv("URL_VNECONOMY")
+        "VnEconomy": os.getenv("URL_VNECONOMY"),
+        "Vietstock": os.getenv("URL_VIETSTOCK")
     }
     news = []
     link_got = set()  # In-memory set to filter duplicate articles within the same scraping cycle
@@ -74,14 +82,9 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
 
             # Core validation: check if entry falls inside target timeframe and avoids current local set duplication
             if article_time_vn >= min_allowed_time and article_link not in link_got:
-                summary_clean = getattr(entry, 'summary', '')
-                
                 # Strip out junk CDATA or dangling anchor tags often bundled into RSS summaries
-                if "/>" in summary_clean:
-                    summary_clean = summary_clean.split("/>")[-1].replace("</a>", "").strip()
-                elif "</a>" in summary_clean:
-                    summary_clean = summary_clean.split("</a>")[-1].strip()
-                
+                raw_summary = getattr(entry, 'summary', '')
+                summary_clean = clean_html(raw_summary)
                 news.append({
                     "source": source_name,
                     "title": getattr(entry, 'title', 'Unknown Title'),
@@ -166,7 +169,7 @@ def save_news_locally(news_list):
 if __name__ == "__main__":
     # Test execution parameters to fetch articles over the past 24 hours
     test_timeframe = timedelta(days=1)
-    test_amount = 5
-    
+    test_amount = 1
+
     news_list = collect_news(news_amount=test_amount, timeframe=test_timeframe)
     save_news_locally(news_list)
