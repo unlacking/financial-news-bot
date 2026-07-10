@@ -4,25 +4,6 @@ import time
 import random
 from typing import List
 from pydantic import BaseModel, Field, field_validator
-<<<<<<< HEAD
-from google import genai
-from google.genai.errors import APIError
-
-# 1. Define schema matching the exact datatypes of the gemini_responses table
-class FinancialAnalysisSchema(BaseModel):
-    summary: str = Field(
-        description="A comprehensive 2-3 sentence summary of the article strictly in Vietnamese."
-    )
-    sentiment: str = Field(
-        description="The market sentiment direction of the news toward the target tickers (e.g., 'Positive', 'Negative', 'Neutral')."
-    )
-    related_tickers: List[str] = Field(
-        description="List of stock tickers explicitly mentioned or heavily impacted (e.g., ['PNJ', 'FPT'])."
-    )
-    importance_score: int = Field(
-        description="The market-moving significance of this article graded as an integer score on a scale from 1 (lowest) to 5 (highest)."
-    )
-=======
 from src.price_collector import get_all_market_tickers
 from google import genai
 from google.genai.errors import APIError
@@ -59,19 +40,12 @@ class FinancialAnalysisSchema(BaseModel):
             print(f"Validation Note: Dropped unlisted/invalid tickers: {dropped}")
             
         return validated_pool
->>>>>>> 5efaf08c26bc98c3614640d621f68628e37f0938
 
     @field_validator("importance_score")
     @classmethod
     def validate_score(cls, value: int) -> int:
-<<<<<<< HEAD
-        # Enforce that the integer fits gracefully within standard ratings
-        if not (1 <= value <= 5):
-            return 3  # Default to neutral/medium importance if out of bounds
-=======
         if not (1 <= value <= 5):
             return 3
->>>>>>> 5efaf08c26bc98c3614640d621f68628e37f0938
         return value
 
 

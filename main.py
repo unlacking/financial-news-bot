@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -38,20 +39,6 @@ def run_pipeline():
 
     except Exception as e:
         print(f"Error executing News Phase: {e}")
-
-    # --- Phase 2: Stock Price Pipeline ---
-    try:
-        watchlist = get_all_market_tickers()
-        price_results = collect_prices(watchlist)
-        save_prices(price_results)
-        
-        insert_json_to_table(
-            local_file_path=os.path.join("src", "stock_data", date_str, "stock_prices.json"),
-            table_name=STOCKS_TABLE
-        )
-    except Exception as e:
-        print(f"Error executing Price Phase: {e}")
-
     print(f"\n====================================================")
     print(f"INTEGRATED PIPELINE RUN COMPLETED")
     print(f"====================================================\n")
