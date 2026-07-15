@@ -116,19 +116,19 @@ def insert_json_to_table(local_file_path, table_name):
         # DATABASE SCHEMA ALIGNMENT LAYER
         # ---------------------------------------------------------
         # Phase 1: Dual-Table Execution via Native HTTP Rest Calls
-        # Enforce entry if it matches either the config variable or the string name
         if table_name == NEWS_TABLE or table_name == "financial_news":
-            
             print(f"DEBUG: Successfully entered Phase 1 processing loop for table: {table_name}")
             
-            news_rows_to_insert, gemini_rows_to_insert = process_news_batch(data, local_path.name)
-
-            # 3. Execute HTTP Posts sequentially using the native httpx client engine
-            if table_name == NEWS_TABLE:
-                print(f"DEBUG: NEWS_TABLE value is '{NEWS_TABLE}'")
-                print(f"DEBUG: GEMINI_TABLE value is '{GEMINI_TABLE}'")
-            
-            from src.ai_processor import analyze_article
+            # If the data is already pre-sorted into the correct dictionary schema layout, skip re-processing
+            if isinstance(data, list) and len(data) > 0 and "prompt_input" in data[0]:
+                gemini_rows_to_insert = data
+                news_rows_to_insert = []
+            elif isinstance(data, list) and len(data) > 0 and "link" in data[0]:
+                news_rows_to_insert = data
+                gemini_rows_to_insert = []
+            else:
+                # Fallback safeguard sequence for legacy unstructured files
+                news_rows_to_insert, gemini_rows_to_insert = process_news_batch(data, local_path.name)
 
             try:
                 news_endpoint = f"{base_url}/rest/v1/{NEWS_TABLE}?on_conflict=link"
@@ -147,11 +147,10 @@ def insert_json_to_table(local_file_path, table_name):
                         print(f"Successfully uploaded {len(gemini_rows_to_insert)} records to '{GEMINI_TABLE}'.")
                     else:
                         print(f"'{GEMINI_TABLE}' upload rejected (HTTP {gemini_res.status_code}): {gemini_res.text}")
-                    
+                
             except Exception as upload_err:
                 print(f"Supabase REST endpoint execution failed: {upload_err}")
                 
-            # Intercept execution chain so it doesn't fall through to the global endpoint fallback
             return True
 
         # Phase 2: Stock Prices Table Realignment

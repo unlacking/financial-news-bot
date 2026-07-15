@@ -47,40 +47,38 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
     scraped_news = []
     gemini_analyses = []
     collected_prices = []
-    # --- Phase 1: Live Financial News Pipeline inside main.py ---
+    # --- Phase 1: Live Financial News Pipeline ---
     try:
-        logging.info("Executing Phase 1: Data Collection")
+        logging.info("Executing Phase 1: Data Collection & AI Analysis")
 
         scraped_news = collect_news(news_amount=5)
         if scraped_news:
             save_news_locally(scraped_news)
             logging.info(f"Successfully harvested {len(scraped_news)} raw articles.")
 
-        save_news_locally(scraped_news)
-        logging.info("Local news cache updated successfully.")
+            # Identify the target platform for contextual tracing logs
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            cafef_path = os.path.join("src", "news_data", f"CafeF_{date_str}.json")
+            inferred_name = "CafeF" if os.path.exists(cafef_path) else "VnEconomy"
 
-        cafef_path = os.path.join("src", "news_data", f"CafeF_{date_str}.json")
-        vneconomy_path = os.path.join("src", "news_data", f"VnEconomy_{date_str}.json")
+            # ===== THE CORE FIX: Process the live news batch directly here! =====
+            logging.info("Running AI Analysis via Gemini and formatting data rows...")
+            formatted_news, gemini_analyses = process_news_batch(scraped_news, inferred_name)
+            logging.info(f"Generated {len(gemini_analyses)} active Gemini analysis objects.")
+            # ====================================================================
 
-        # Only attempt database insertion if the file was actually generated/updated
-        if os.path.exists(cafef_path):
-            logging.info(f"Syncing local cache data to cloud for CafeF...")
-            insert_json_to_table(local_file_path=cafef_path, table_name=NEWS_TABLE)
+            # Sync the processed payloads down to your Supabase tables sequentially
+            if formatted_news:
+                insert_json_to_table(local_file_path=cafef_path, table_name=NEWS_TABLE)
         else:
-            logging.info("CafeF local file not found. Skipping.")
-
-        if os.path.exists(vneconomy_path):
-            logging.info(f"Syncing local cache data to cloud for VnEconomy...")
-            insert_json_to_table(local_file_path=vneconomy_path, table_name=NEWS_TABLE)
-        else:
-            logging.info("VnEconomy local file not found. Skipping.")
+            logging.info("No fresh articles harvested during this cycle.")
 
     except Exception as e:
         logging.error(f"Error executing News Phase: {e}")
-
+        
     # --- Phase 2: Stock Price Pipeline ---
     try:
-        watchlist = get_all_market_tickers()
+        watchlist = get_all_market_tickers(max_tickers=20)
         collected_prices = collect_prices(watchlist)
         if collected_prices:
             save_prices(collected_prices)
