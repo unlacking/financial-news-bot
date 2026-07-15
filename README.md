@@ -14,7 +14,7 @@ A system designed to periodically fetch financial news (via RSS) and stock price
 
 ---
 
-## Tech Stack & Tools | Công Cụ Kỹ Thuật
+## Tech Stack & Tools
 
 | Component | Tool / Library | Purpose |
 | :--- | :--- | :--- |
