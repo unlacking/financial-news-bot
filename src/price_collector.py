@@ -10,20 +10,34 @@ from vnstock import Market, Reference
 
 load_dotenv()
 
-def get_all_market_tickers():
-    "Dynamically fetches all active stock symbols currently listed on the Vietnamese market."
+def get_all_market_tickers(max_tickers: int = None):
+    """
+    Dynamically fetches active stock symbols currently listed on the Vietnamese market.
+    :param max_tickers: Optional integer to limit the total number of tickers returned.
+    :return: List of validated 3-character stock ticker strings.
+    """
     try:
         ref = Reference()
         df_symbols = ref.equity.list()
         if 'symbol' in df_symbols.columns:
             tickers = df_symbols['symbol'].dropna().unique().tolist()
             # Filter down to standard 3-character stock tickers
-            return [str(t).strip() for t in tickers if len(str(t).strip()) == 3]
+            clean_tickers = [str(t).strip() for t in tickers if len(str(t).strip()) == 3]
+            
+            # Apply slicing if max_tickers configuration parameter is specified
+            if max_tickers is not None and max_tickers > 0:
+                return clean_tickers[:max_tickers]
+            
+            return clean_tickers
+            
     except Exception as e:
         print(f"Warning: Failed to fetch live ticker list dynamically: {e}")
     
-    # Absolute minimal fallback fallback if connection fails
-    return ["VCB", "FPT", "HPG", "VNM"]
+    # Absolute minimal fallback if connection fails
+    fallback_list = ["VCB", "FPT", "HPG", "VNM"]
+    if max_tickers is not None and max_tickers > 0:
+        return fallback_list[:max_tickers]
+    return fallback_list
 
 def collect_prices(ticker_list=None):
     if ticker_list is None:
