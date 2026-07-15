@@ -1,4 +1,13 @@
-# test_formatter.py
+# test_suite/test_formatter.py
+import os
+import sys
+
+# Resolve the absolute path of the project root directory (one level up from this file)
+# and append it to sys.path before importing local custom modules.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from src.formatter import format_alert, format_digest
 
 def run_formatter_test():

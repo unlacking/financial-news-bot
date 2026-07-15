@@ -14,9 +14,9 @@ if env_keywords:
 else:
     # Fallback list if not configured in .env
     SENSITIVE_KEYWORDS_LIST = [
-        "investigation", "arrest", "default", "bankruptcy", 
-        "audit", "violation", "margin call", "suspension", 
-        "losses", "crisis", "legal issue"
+        "điều tra", "bắt giam", "vỡ nợ", "phá sản", 
+        "thanh tra", "vi phạm", "bán giải chấp", "đình chỉ", 
+        "thua lỗ", "khủng hoảng", "vấn đề pháp lý"
     ]
 
 # Alert thresholds configuration
