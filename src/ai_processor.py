@@ -69,6 +69,7 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
                 config={
                     "response_mime_type": "application/json",
                     "response_schema": FinancialAnalysisSchema,
+                    "temperature": 0.0,
                     "system_instruction": (
                         "You are an elite financial analyst monitoring the Vietnamese stock market.\n"
                         "Analyze the provided news article text and extract structural metadata.\n\n"
