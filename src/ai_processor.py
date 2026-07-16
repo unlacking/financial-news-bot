@@ -104,8 +104,26 @@ def analyze_article(title: str, body: str) -> dict:
         "importance_score": 3
     }
 
-    if not body or len(body.strip()) < 10:
-        return fallback_data
+    # Clean the input strings to prevent whitespace-only bypasses
+    clean_body = body.strip() if body else ""
+    clean_title = title.strip() if title else ""
+
+    # ===== INTEGRATED OPTIMIZATION FIX: Catch text placeholders early =====
+    placeholders = {"no body text available.", "none", "null", "undefined", ""}
+    
+    if (
+        not clean_body 
+        or len(clean_body) < 10 
+        or clean_body.lower() in placeholders
+    ):
+        # If the title contains real information, salvage the analysis by falling back to the headline context
+        if len(clean_title) > 10:
+            print(f"Notice: Missing body text. Downgrading context scope to Title only for: {clean_title[:30]}...")
+            body = "No extended body text provided. Base your analysis strictly on the headline title."
+        else:
+            print(f"Resource Guard: Dropping '{clean_title[:30]}' due to completely empty/invalid text body context.")
+            return fallback_data
+    # =======================================================================
 
     try:
         prompt = f"Title: {title}\nBody: {body}"

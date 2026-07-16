@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 import httpx
 from urllib.parse import urlparse
 from datetime import datetime
-from src.ai_processor import analyze_article
-from dotenv import load_dotenv
 
 load_dotenv()
 GEMINI_VERSION = os.getenv("GEMINI_VERSION")
@@ -38,7 +36,7 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
         for row in batch:
             # 1. Format the standard news data row
             inferred_source = "CafeF" if "CafeF" in local_path_name else "VnEconomy"
-            published_at = row.get("published") or row.get("published_at")
+            published_at = row.get("published_at") or row.get("published")
             link = row.get("url") or row.get("link")
             title = row.get("title", "Untitled")
             body = row.get("body", "")
@@ -52,22 +50,28 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
             }
             news_rows_to_insert.append(news_row)
             
-            # 2. Generate the separate Gemini Analysis payload
-            context_text = body if (body and len(body.strip()) > 10) else title
-            
-            if context_text and len(context_text.strip()) > 2:
+            # 2. Generate the separate Gemini Analysis payload (Filter out empty/low value text body targets early)
+            if body and len(body.strip()) > 10:
                 print(f"Analyzing and queuing Gemini response for: {title[:30]}...")
-                analysis = analyze_article(title, body if body else "No body text available.")
-                
-                gemini_row = {
-                    "prompt_input": f"Title: {title}\nBody: {body[:200] if body else 'None'}...",
-                    "model_name": GEMINI_VERSION,
-                    "summary": analysis.get("summary"),
-                    "sentiment": analysis.get("sentiment"),
-                    "related_tickers": analysis.get("related_tickers"),
-                    "importance_score": analysis.get("importance_score")
+                analysis = analyze_article(title, body)
+            else:
+                print(f"Skipping API call for '{title[:30]}' due to missing/empty article body.")
+                analysis = {
+                    "summary": "Full text body unavailable for analysis.",
+                    "sentiment": "Neutral",
+                    "related_tickers": [],
+                    "importance_score": 1
                 }
-                gemini_rows_to_insert.append(gemini_row)
+                
+            gemini_row = {
+                "prompt_input": f"Title: {title}\nBody: {body[:200] if body else 'None'}...",
+                "model_name": GEMINI_VERSION,
+                "summary": analysis.get("summary"),
+                "sentiment": analysis.get("sentiment"),
+                "related_tickers": analysis.get("related_tickers"),
+                "importance_score": analysis.get("importance_score")
+            }
+            gemini_rows_to_insert.append(gemini_row)
 
             time.sleep(1.5) 
         
@@ -92,7 +96,6 @@ def insert_json_to_table(local_file_path, table_name):
     parsed_url = urlparse(URL)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
     
-    # PostgREST handles conflicts by appending an explicit resolution query parameter to the URL
     if table_name == NEWS_TABLE:
         endpoint = f"{base_url}/rest/v1/{table_name}?on_conflict=link"
     else:
@@ -119,15 +122,15 @@ def insert_json_to_table(local_file_path, table_name):
         if table_name == NEWS_TABLE or table_name == "financial_news":
             print(f"DEBUG: Successfully entered Phase 1 processing loop for table: {table_name}")
             
-            # If the data is already pre-sorted into the correct dictionary schema layout, skip re-processing
+            # Smart check: If the data array is already explicitly structured from memory, use it directly
             if isinstance(data, list) and len(data) > 0 and "prompt_input" in data[0]:
                 gemini_rows_to_insert = data
                 news_rows_to_insert = []
-            elif isinstance(data, list) and len(data) > 0 and "link" in data[0]:
+            elif isinstance(data, list) and len(data) > 0 and "link" in data[0] and "prompt_input" not in data[0]:
                 news_rows_to_insert = data
                 gemini_rows_to_insert = []
             else:
-                # Fallback safeguard sequence for legacy unstructured files
+                # Fallback safeguard sequence for generic legacy unstructured files
                 news_rows_to_insert, gemini_rows_to_insert = process_news_batch(data, local_path.name)
 
             try:
@@ -155,12 +158,9 @@ def insert_json_to_table(local_file_path, table_name):
 
         # Phase 2: Stock Prices Table Realignment
         elif table_name == STOCKS_TABLE:
-            # Re-verify that the incoming dictionary keys are handled as a clean list of rows
             if isinstance(data, dict):
-                # If it's a legacy single-dictionary fallback object, wrap it into a list
                 data = [data]
                 
-            # Establish the runtime validation timestamp
             today_str = datetime.now().strftime("%Y-%m-%d")
             for row in data:
                 if "close" in row:
