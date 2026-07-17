@@ -35,14 +35,19 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
         
         for row in batch:
             # 1. Format the standard news data row
-            inferred_source = "CafeF" if "CafeF" in local_path_name else "VnEconomy"
-            published_at = row.get("published_at") or row.get("published")
+            inferred_source = "Unknown"
+            sources_map = ["CafeF", "VnEconomy", "Vietstock"]
+            for src in sources_map:
+                if src.lower() in local_path_name.lower():
+                    inferred_source = src
+                    break
+            published_at = row.get("published_at")
             link = row.get("url") or row.get("link")
             title = row.get("title", "Untitled")
-            body = row.get("body", "")
+            summary = row.get("summary", "")
 
             news_row = {
-                "source": row.get("source", inferred_source),
+                "source": row.get("source") or inferred_source,
                 "title": title,
                 "link": link,
                 "published_at": published_at,
@@ -50,21 +55,22 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
             }
             news_rows_to_insert.append(news_row)
             
-            # 2. Generate the separate Gemini Analysis payload (Filter out empty/low value text body targets early)
-            if body and len(body.strip()) > 10:
+            # 2. Generate the separate Gemini Analysis payload (Filter out empty/low value text summary targets early)
+            if summary and len(summary.strip()) > 10:
                 print(f"Analyzing and queuing Gemini response for: {title[:30]}...")
-                analysis = analyze_article(title, body)
+                analysis = analyze_article(title, summary)
             else:
-                print(f"Skipping API call for '{title[:30]}' due to missing/empty article body.")
+                #Bug catch mechanism (if returned importance_score is 1 then the bug occured somewhere in here)
+                print(f"Skipping API call for '{title[:30]}' due to missing/empty article summary.")
                 analysis = {
-                    "summary": "Full text body unavailable for analysis.",
+                    "summary": "Full text summary unavailable for analysis.",
                     "sentiment": "Neutral",
                     "related_tickers": [],
                     "importance_score": 1
                 }
                 
             gemini_row = {
-                "prompt_input": f"Title: {title}\nBody: {body[:200] if body else 'None'}...",
+                "prompt_input": f"Title: {title}\nSummary: {summary[:200] if summary else 'None'}...",
                 "model_name": GEMINI_VERSION,
                 "summary": analysis.get("summary"),
                 "sentiment": analysis.get("sentiment"),

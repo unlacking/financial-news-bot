@@ -5,5 +5,5 @@ __pycache__/
 .vscode/
 stock_data/
 news_data/
-.logs/
+logs/
 .log

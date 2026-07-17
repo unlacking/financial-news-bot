@@ -108,7 +108,7 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
                         "source": source_name,
                         "title": getattr(entry, 'title', 'Unknown Title'),
                         "link": article_link,
-                        "published": article_time_vn.strftime("%Y-%m-%d %H:%M:%S"), 
+                        "published_at": article_time_vn.strftime("%Y-%m-%d %H:%M:%S"), 
                         "summary": summary_clean
                     })
                     

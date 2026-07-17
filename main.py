@@ -57,7 +57,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
             logging.info(f"Successfully harvested {len(scraped_news)} raw articles from RSS feeds.")
 
             # Identify the target platform paths for checking local duplicates
-            cafef_path = os.path.join("src", "news_data", f"CafeF_{date_str}.json")
+            cafef_path = os.path.join(project_root, "src", "news_data", f"CafeF_{date_str}.json")
             inferred_name = "CafeF" if os.path.exists(cafef_path) else "VnEconomy"
 
             # ===== THE EFFICIENCY FIX: Pre-Flight Deduplication =====
@@ -109,7 +109,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
             logging.info(f"Successfully collected {len(collected_prices)} stock pricing rows.")
 
         insert_json_to_table(
-            local_file_path=os.path.join("stock_data", date_str, "stock_prices.json"),
+            local_file_path=os.path.join(project_root, "src", "stock_data", date_str, "stock_prices.json"),
             table_name=STOCKS_TABLE
         )
     except Exception as e:

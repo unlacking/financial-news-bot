@@ -75,7 +75,7 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
                         "Analyze the provided news article text and extract structural metadata.\n\n"
                         "CRITICAL DIRECTION FOR THE 'summary' FIELD:\n"
                         "Align your output length, dense tone, and style perfectly with this gold-standard example:\n\n"
-                        "Example Input Body: Vingroup successfully floated $200 million in international bonds on Tuesday to fund sustainable development projects.\n"
+                        "Example Input Summary: Vingroup successfully floated $200 million in international bonds on Tuesday to fund sustainable development projects.\n"
                         "Example Output Summary: Vingroup đã phát hành thành công 200 triệu USD trái phiếu quốc tế nhằm tài trợ cho các dự án phát triển bền vững."
                     )
                 }
@@ -95,7 +95,7 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
     raise Exception("Execution failed: Max retries exceeded due to rate limiting.")
 
 
-def analyze_article(title: str, body: str) -> dict:
+def analyze_article(title: str, summary: str) -> dict:
     """Processes raw text and guarantees a dictionary conforming to the schema."""
     fallback_data = {
         "summary": "Không thể xử lý tóm tắt do quá tải hệ thống.",
@@ -105,28 +105,28 @@ def analyze_article(title: str, body: str) -> dict:
     }
 
     # Clean the input strings to prevent whitespace-only bypasses
-    clean_body = body.strip() if body else ""
+    clean_summary = summary.strip() if summary else ""
     clean_title = title.strip() if title else ""
 
     # ===== INTEGRATED OPTIMIZATION FIX: Catch text placeholders early =====
-    placeholders = {"no body text available.", "none", "null", "undefined", ""}
+    placeholders = {"no summary text available.", "none", "null", "undefined", ""}
     
     if (
-        not clean_body 
-        or len(clean_body) < 10 
-        or clean_body.lower() in placeholders
+        not clean_summary 
+        or len(clean_summary) < 10 
+        or clean_summary.lower() in placeholders
     ):
         # If the title contains real information, salvage the analysis by falling back to the headline context
         if len(clean_title) > 10:
-            print(f"Notice: Missing body text. Downgrading context scope to Title only for: {clean_title[:30]}...")
-            body = "No extended body text provided. Base your analysis strictly on the headline title."
+            print(f"Notice: Missing summary text. Downgrading context scope to Title only for: {clean_title[:30]}...")
+            summary = "No extended summary text provided. Base your analysis strictly on the headline title."
         else:
-            print(f"Resource Guard: Dropping '{clean_title[:30]}' due to completely empty/invalid text body context.")
+            print(f"Resource Guard: Dropping '{clean_title[:30]}' due to completely empty/invalid summary context.")
             return fallback_data
     # =======================================================================
 
     try:
-        prompt = f"Title: {title}\nBody: {body}"
+        prompt = f"Title: {title}\nSummary: {summary[:200] if summary else 'None'}..."
         raw_json_output = _call_gemini_with_backoff(prompt)
         return json.loads(raw_json_output)
     except Exception as final_err:
