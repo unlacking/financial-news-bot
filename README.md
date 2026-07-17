@@ -22,7 +22,7 @@ An automated, data-driven market intelligence pipeline designed to periodically 
 | **News Parser** | `feedparser` | Fetching and parsing live financial RSS streams |
 | **Stock Data** | `vnstock` | Interrogating real-time Vietnamese stock market metrics |
 | **Database** | Supabase (PostgREST API) | Real-time cloud storage & relational schema hosting |
-| **AI Processor** | Google Gen AI SDK (`gemini-2.5-flash`) | Structured metadata analysis and translation |
+| **AI Processor** | Google Gen AI SDK (`gemini-3.5-flash`) | Structured metadata analysis and translation |
 | **HTTP Transport** | `httpx` | Fast, asynchronous native REST requests to cloud endpoints |
 | **Reporting** | `smtplib` / `email` | Secure automated HTML newsletter dispatch via Google SMTP |
 | **Validation** | `pydantic` | Enforces runtime structural schema contracts on AI payloads |
