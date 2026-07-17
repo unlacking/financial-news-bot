@@ -1,6 +1,7 @@
 import os
 import smtplib
 import logging
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
@@ -98,7 +99,7 @@ def send_email_digest(prices: list, news: list, analyses: list) -> bool:
         return False
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"📊 [Bản Tin EOD] Báo Cáo Thị Trường - {logging.datetime.datetime.now().strftime('%d/%m/%Y')}"
+    msg["Subject"] = f"📊 [Bản Tin EOD] Báo Cáo Thị Trường - {datetime.now().strftime('%d/%m/%Y')}"
     msg["From"] = SENDER_EMAIL
     
     # The "To" header needs to be a clean string for the email UI
