@@ -90,7 +90,7 @@ def send_email_digest(prices: list, news: list, analyses: list) -> bool:
         logging.warning("SMTP Parameters missing. Skipping email dispatch.")
         return False
 
-    # 1. Parse the comma-separated string into a clean Python list
+    # Parse the comma-separated string into a clean Python list
     receiver_list = [email.strip() for email in RECEIVER_EMAIL.split(",") if email.strip()]
     
     if not receiver_list:
@@ -113,7 +113,7 @@ def send_email_digest(prices: list, news: list, analyses: list) -> bool:
             server.starttls()
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             
-            # 2. Pass the parsed Python list directly into sendmail
+            # Pass the parsed Python list directly into sendmail
             server.sendmail(SENDER_EMAIL, receiver_list, msg.as_string())
             
         logging.info(f"HTML Newsletter successfully routed to {len(receiver_list)} recipients.")

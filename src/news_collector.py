@@ -8,7 +8,7 @@ import re
 import logging
 from dotenv import load_dotenv
 
-# 1. Resolve absolute path of the project directory to load the .env file safely
+# Resolve absolute path of the project directory to load the .env file safely
 current_script_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(current_script_dir, ".env")
 load_dotenv(dotenv_path=env_path)
@@ -57,13 +57,13 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
                 continue
             
             try:
-                # 1. Download RSS feed content using httpx with proper error handling
+                # Download RSS feed content using httpx with proper error handling
                 response = client.get(url)
                 if response.status_code != 200:
                     logging.warning(f"{source_name} returned status code {response.status_code} (Maintenance?)")
                     continue
                 
-                # 2. Parse the RSS feed content using feedparser
+                # Parse the RSS feed content using feedparser
                 feed = feedparser.parse(response.text)
                 
             except httpx.RequestError as req_err:
@@ -79,7 +79,7 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
                 logging.warning(f"Warning: RSS entries empty or invalid for {source_name}")
                 continue
 
-            # 3. Iterate through feed entries and filter based on time and uniqueness
+            # Iterate through feed entries and filter based on time and uniqueness
             current_news_count = 0
             for entry in feed.entries: 
                 # Stop processing if we have already collected the maximum allowed articles for this source
@@ -152,7 +152,7 @@ def save_news_locally(news_list):
         existing_articles = []
         existing_links = set()
         
-        # STEP 1: If the archival track exists, read it to index unique hyperlinks already committed to disk
+        # If the archival track exists, read it to index unique hyperlinks already committed to disk
         if os.path.exists(full_file_path):
             try:
                 with open(full_file_path, "r", encoding="utf-8") as f:
@@ -162,7 +162,7 @@ def save_news_locally(news_list):
             except (json.JSONDecodeError, IOError) as read_err:
                 logging.warning(f"Warning: Could not parse existing file {filename}. Initializing fresh. Error: {read_err}")
         
-        # STEP 2: Compare incoming data against indexed disk record array, filtering out collisions
+        # Compare incoming data against indexed disk record array, filtering out collisions
         new_additions_count = 0
         for article in incoming_articles:
             if article["link"] not in existing_links:
@@ -170,7 +170,7 @@ def save_news_locally(news_list):
                 existing_links.add(article["link"])
                 new_additions_count += 1
         
-        # STEP 3: Commit changes to data tracking manifest only if brand new items were verified
+        # Commit changes to data tracking manifest only if brand new items were verified
         if new_additions_count > 0:
             try:
                 with open(full_file_path, "w", encoding="utf-8") as f:

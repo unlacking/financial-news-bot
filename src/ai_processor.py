@@ -35,13 +35,13 @@ class FinancialAnalysisSchema(BaseModel):
         Intersects the AI-generated list against live listed market assets.
         Forces formatting compliance and eliminates out-of-bounds hallucinations.
         """
-        # 1. Clean format string structures (Force Uppercase & strip whitespace)
+        # Clean format string structures (Force Uppercase & strip whitespace)
         cleaned_tickers = [str(t).strip().upper() for t in tickers]
         
-        # 2. Perform a Set-Intersection to extract ONLY valid listed market assets
+        # Perform a Set-Intersection to extract ONLY valid listed market assets
         validated_pool = list(set(cleaned_tickers).intersection(VALID_VIETNAMESE_TICKERS))
         
-        # 3. Log a warning terminal note if tickers were filtered out
+        # Log a warning terminal note if tickers were filtered out
         dropped = set(cleaned_tickers) - set(validated_pool)
         if dropped:
             print(f"Validation Note: Dropped unlisted/invalid tickers: {dropped}")
@@ -108,7 +108,6 @@ def analyze_article(title: str, summary: str) -> dict:
     clean_summary = summary.strip() if summary else ""
     clean_title = title.strip() if title else ""
 
-    # ===== INTEGRATED OPTIMIZATION FIX: Catch text placeholders early =====
     placeholders = {"no summary text available.", "none", "null", "undefined", ""}
     
     if (
@@ -123,7 +122,6 @@ def analyze_article(title: str, summary: str) -> dict:
         else:
             print(f"Resource Guard: Dropping '{clean_title[:30]}' due to completely empty/invalid summary context.")
             return fallback_data
-    # =======================================================================
 
     try:
         prompt = f"Title: {title}\nSummary: {summary[:200] if summary else 'None'}..."
