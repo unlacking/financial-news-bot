@@ -75,10 +75,10 @@ def analyze_news_alerts(news_items: List[Dict[str, Any]], gemini_analyses: List[
         importance = analysis.get("importance_score", 3)
         tickers = analysis.get("related_tickers", [])
         
-        # --- Rule 2 Check: Negative & High Importance ---
+        # Rule 2 Check: Negative & High Importance
         is_critical_sentiment = (sentiment in trigger_sentiments) and (importance >= min_score)
         
-        # --- Rule 3 Check: Sensitive Keywords ---
+        # Rule 3 Check: Sensitive Keywords
         found_keywords = []
         full_text_to_check = f"{title} {summary}".lower()
         for word in sensitive_words:

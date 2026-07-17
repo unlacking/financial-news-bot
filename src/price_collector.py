@@ -78,7 +78,7 @@ def collect_prices(ticker_list=None):
                 else:
                     pct_change = 0.0
 
-                # --- APPEND A FLAT DATABASE-READY ROW ---
+                # Append a flat database ready row to the results array for later JSON serialization
                 price_data.append({
                     "ticker": ticker,
                     "price": latest_price,

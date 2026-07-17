@@ -34,7 +34,7 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
         print(f"Processing sub-batch {i // BATCH_SIZE + 1} ({len(batch)} articles)...")
         
         for row in batch:
-            # 1. Format the standard news data row
+            # Format the standard news data row
             inferred_source = "Unknown"
             sources_map = ["CafeF", "VnEconomy", "Vietstock"]
             for src in sources_map:
@@ -55,12 +55,12 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
             }
             news_rows_to_insert.append(news_row)
             
-            # 2. Generate the separate Gemini Analysis payload (Filter out empty/low value text summary targets early)
+            # Generate the separate Gemini Analysis payload (Filter out empty/low value text summary targets early)
             if summary and len(summary.strip()) > 10:
                 print(f"Analyzing and queuing Gemini response for: {title[:30]}...")
                 analysis = analyze_article(title, summary)
             else:
-                #Bug catch mechanism (if returned importance_score is 1 then the bug occured somewhere in here)
+                # Bug catch mechanism (if returned importance_score is 1 then the bug occured somewhere in here)
                 print(f"Skipping API call for '{title[:30]}' due to missing/empty article summary.")
                 analysis = {
                     "summary": "Full text summary unavailable for analysis.",
