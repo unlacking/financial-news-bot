@@ -70,6 +70,7 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
                 }
                 
             gemini_row = {
+                "link": link,
                 "prompt_input": f"Title: {title}\nSummary: {summary[:200] if summary else 'None'}...",
                 "model_name": GEMINI_VERSION,
                 "summary": analysis.get("summary"),
