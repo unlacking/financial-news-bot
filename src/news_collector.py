@@ -102,7 +102,7 @@ def collect_news(news_amount=5, timeframe=timedelta(days=1)):
 
                 # Check time and uniqueness conditions
                 if article_time_vn >= min_allowed_time and article_link not in link_got:
-                    raw_summary = getattr(entry, 'summary', '')
+                    raw_summary = getattr(entry, 'summary', '') or getattr(entry, 'description', '')
                     summary_clean = clean_html(raw_summary)
                     news.append({
                         "source": source_name,
