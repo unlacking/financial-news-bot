@@ -18,6 +18,7 @@ from src.supabase_helper import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, 
 from src.alert_engine import analyze_price_alerts, analyze_news_alerts
 from src.formatter import format_alert, format_digest
 from src.telegram_bot import send_message, send_bulk_messages
+from src.email_client import send_email_digest
 
 log_dir = os.path.join(project_root, "logs")
 os.makedirs(log_dir, exist_ok=True)
@@ -60,7 +61,6 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
             cafef_path = os.path.join(project_root, "src", "news_data", f"CafeF_{date_str}.json")
             inferred_name = "CafeF" if os.path.exists(cafef_path) else "VnEconomy"
 
-            # ===== THE EFFICIENCY FIX: Pre-Flight Deduplication =====
             existing_links = set()
             if os.path.exists(cafef_path):
                 try:
@@ -80,7 +80,6 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
                 return
 
             logging.info(f"Processing {len(fresh_news)} completely new articles through Gemini API...")
-            # =========================================================
 
             # Process the live news batch directly here
             logging.info("Running AI Analysis via Gemini and formatting data rows...")
@@ -119,7 +118,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
     try:
         logging.info("Executing Phase 3: Alert Evaluation")
         
-        # Rule 1 Evaluation: Price threshold checks
+        # Price threshold checks
         if collected_prices:
             price_alerts = analyze_price_alerts(collected_prices)
             logging.info(f"Price alert criteria scanned. Violations detected: {len(price_alerts)}")
@@ -128,7 +127,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
                 send_message(formatted_msg)
                 time.sleep(1.0)
 
-        # Rule 2 & 3 Evaluation: News sensitivity analysis
+        # News sensitivity analysis
         if scraped_news and gemini_analyses:
             news_alerts = analyze_news_alerts(scraped_news, gemini_analyses)
             logging.info(f"News alert criteria scanned. Violations detected: {len(news_alerts)}")
@@ -145,13 +144,18 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
     if execution_mode == "EOD":
         try:
             logging.info("Executing Phase 4: Newsletter Generation and Broadcast")
+            
+            # 1. Dispatch to Telegram Channel
             digest_chunks = format_digest(collected_prices, scraped_news, gemini_analyses)
             send_bulk_messages(digest_chunks)
-            logging.info("Daily newsletter digest blocks transmitted successfully.")
+            logging.info("Daily newsletter digest blocks transmitted successfully to Telegram.")
+            
+            # 2. Dispatch direct to email workspace
+            logging.info("Compiling and dispatching secure HTML SMTP email matrix...")
+            send_email_digest(collected_prices, scraped_news, gemini_analyses)
+            
         except Exception as e:
-            logging.error(f"Failed to transmit Daily Newsletter summary: {e}")
-
-    logging.info("Pipeline execution completed.")
+            logging.error(f"Failed to transmit Daily Newsletter summary outputs: {e}")
 
 # --- AUTOMATION & SCHEDULER LAYER ---
 
