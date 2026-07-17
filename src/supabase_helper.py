@@ -141,7 +141,7 @@ def insert_json_to_table(local_file_path, table_name):
 
             try:
                 news_endpoint = f"{base_url}/rest/v1/{NEWS_TABLE}?on_conflict=link"
-                gemini_endpoint = f"{base_url}/rest/v1/{GEMINI_TABLE}"
+                gemini_endpoint = f"{base_url}/rest/v1/{GEMINI_TABLE}?on_conflict=link"
 
                 if news_rows_to_insert:
                     news_res = httpx.post(news_endpoint, headers=headers, json=news_rows_to_insert)
