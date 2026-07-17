@@ -14,7 +14,7 @@ from src.price_collector import get_all_market_tickers, collect_prices, save_dat
 from src.supabase_helper import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, process_news_batch
 from src.alert_engine import analyze_price_alerts, analyze_news_alerts
 from src.formatter import format_alert, format_digest
-from src.telegram_bot import main as start_telegram_bot
+from src.telegram_bot import send_message, send_bulk_messages, main as start_telegram_bot
 from src.email_client import send_email_digest
 
 # Global thread-safe state dictionary for your /status command
