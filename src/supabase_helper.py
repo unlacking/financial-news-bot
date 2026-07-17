@@ -195,3 +195,97 @@ def insert_json_to_table(local_file_path, table_name):
     except Exception as e:
         print(f"Network error updating Supabase table: {e}")
         return False
+
+# ------------------------------------------------------------------------------
+# INTERACTIVE TELEGRAM CLI COMMAND READ LAYERS
+# ------------------------------------------------------------------------------
+
+def check_supabase_connection() -> bool:
+    """Verifies API connection to the database by hitting a root health endpoint."""
+    if not URL or not KEY:
+        return False
+    try:
+        parsed_url = urlparse(URL)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+        headers = {
+            "Authorization": f"Bearer {KEY}",
+            "apiKey": KEY
+        }
+        response = httpx.get(f"{base_url}/rest/v1/", headers=headers, timeout=5.0)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Interactive health tracking failed: {e}")
+        return False
+
+def get_stock_price(ticker: str) -> dict | None:
+    """Queries the stock table for the absolute newest price point of a ticker."""
+    if not URL or not KEY:
+        return None
+    try:
+        parsed_url = urlparse(URL)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+        headers = {
+            "Authorization": f"Bearer {KEY}",
+            "apiKey": KEY
+        }
+        params = {
+            "ticker": f"eq.{ticker}",
+            "order": "collected_date.desc",
+            "limit": 1
+        }
+        
+        url = f"{base_url}/rest/v1/{STOCKS_TABLE}"
+        response = httpx.get(url, headers=headers, params=params, timeout=5.0)
+        
+        if response.status_code == 200 and response.json():
+            return response.json()[0]
+        return None
+    except Exception as e:
+        print(f"Failed to pull on-demand metrics for {ticker}: {e}")
+        return None
+
+def get_latest_news(ticker: str = None, limit: int = 3) -> list:
+    """
+    Fetches the latest articles. 
+    If a ticker is provided, queries the GEMINI_TABLE for matching related_tickers.
+    Otherwise, returns broad market news from the core NEWS_TABLE.
+    """
+    if not URL or not KEY:
+        return []
+    try:
+        parsed_url = urlparse(URL)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+        headers = {
+            "Authorization": f"Bearer {KEY}",
+            "apiKey": KEY
+        }
+        
+        # Scenario A: Ticker-specific lookup (Requires checking cross-reference array inside Gemini analysis)
+        if ticker:
+            url = f"{base_url}/rest/v1/{GEMINI_TABLE}"
+            params = {
+                "related_tickers": f"cs.{{{ticker}}}",  # PostgREST notation for array contains: {TICKER}
+                "limit": limit
+            }
+            # Note: You can join the core news table if your schema has foreign keys,
+            # but this reads the structured analysis context directly.
+        
+        # Scenario B: General market feed snapshot
+        else:
+            url = f"{base_url}/rest/v1/{NEWS_TABLE}"
+            params = {
+                "order": "published_at.desc",
+                "limit": limit
+            }
+            
+        response = httpx.get(url, headers=headers, params=params, timeout=5.0)
+        if response.status_code == 200:
+            return response.json()
+        return []
+    except Exception as e:
+        print(f"Failed to retrieve on-demand interactive text rows: {e}")
+        return []
+    
