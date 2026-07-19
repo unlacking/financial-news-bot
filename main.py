@@ -23,23 +23,31 @@ SYSTEM_STATE = {
     "last_run_status": "Idle",
     "scheduler_active": True
 }
+try:
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    log_dir = os.path.join(project_root, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, "pipeline.log")
 
-project_root = os.path.dirname(os.path.abspath(__file__))
-log_dir = os.path.join(project_root, "logs")
-os.makedirs(log_dir, exist_ok=True)
-log_file_path = os.path.join(log_dir, "pipeline.log")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(log_file_path, encoding="utf-8"),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+except Exception as log_init_err:
+    # Fail-safe print to console if logging setup crashes, then abort execution.
+    print(f"CRITICAL: Failed to initialize system logging architecture: {log_init_err}")
+    sys.exit(1)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(log_file_path, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-load_dotenv() 
-logging.info("Environment variables loaded successfully.")
+# CRITICAL TRY-CATCH: Loading .env variables can fail if the file is locked, corrupt, or missing.
+try:
+    load_dotenv() 
+    logging.info("Environment variables loaded successfully.")
+except Exception as env_err:
+    logging.error(f"Non-fatal configuration error: Failed to map .env variables clean: {env_err}")
 
 def run_pipeline(execution_mode: str = "INTRADAY"):
     logging.info(f"Pipeline execution started in mode: {execution_mode}")
@@ -189,10 +197,15 @@ if __name__ == "__main__":
     else:
         logging.info("Initializing Unified Fin-News Bot Ecosystem...")
 
-        # Spin up the Telegram Bot on an isolated background thread cleanly
-        bot_thread = threading.Thread(target=start_telegram_bot, daemon=True)
-        bot_thread.start()
-        logging.info("Background thread spinning up internal long-polling listener.")
+        # CRITICAL TRY-CATCH: Multi-threading can crash if the operating system is low on system resources or blocking thread allocations.
+        try:
+            # Spin up the Telegram Bot on an isolated background thread cleanly
+            bot_thread = threading.Thread(target=start_telegram_bot, daemon=True)
+            bot_thread.start()
+            logging.info("Background thread spinning up internal long-polling listener.")
+        except Exception as thread_err:
+            logging.critical(f"FATAL: System failed to deploy long-polling background thread tracking: {thread_err}")
+            sys.exit(1)
 
         # Fire up the main automation schedule loop
         start_scheduler()
