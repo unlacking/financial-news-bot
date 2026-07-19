@@ -3,11 +3,12 @@ import sys
 import time
 import logging
 import json
+import httpx
 from datetime import datetime
 import threading
 import schedule 
 from dotenv import load_dotenv
-
+from urllib.parse import urlparse
 # Clean, standard imports relative to the project root
 from src.news_collector import collect_news, save_news_locally
 from src.price_collector import get_all_market_tickers, collect_prices, save_data_locally as save_prices
@@ -23,6 +24,46 @@ SYSTEM_STATE = {
     "last_run_status": "Idle",
     "scheduler_active": True
 }
+
+def check_gemini_analysis(link: str) -> bool:
+    """
+    Directly queries the Supabase gemini_responses table to see if a valid 
+    analysis already exists for this specific article URL.
+    """
+    url_env = os.getenv("SUPABASE_URL")
+    key_env = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    gemini_table = os.getenv("SUPABASE_GEMINI_TABLE", "gemini_responses")
+    
+    if not url_env or not key_env:
+        logging.warning("Supabase keys missing. Cannot verify cloud DB cache.")
+        return False
+        
+    try:
+        parsed_url = urlparse(url_env)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        endpoint = f"{base_url}/rest/v1/{gemini_table}"
+        
+        headers = {
+            "Authorization": f"Bearer {key_env}",
+            "apiKey": key_env
+        }
+        # Look for the link, making sure it isn't a row with a failed fallback summary
+        params = {
+            "link": f"eq.{link}",
+            "select": "sentiment,summary"
+        }
+        
+        response = httpx.get(endpoint, headers=headers, params=params, timeout=5.0)
+        if response.status_code == 200 and response.json():
+            record = response.json()[0]
+            # Verify it has real data and isn't a placeholder failure block
+            if record.get("sentiment") and record.get("sentiment") != "N/A":
+                return True
+        return False
+    except Exception as db_err:
+        logging.error(f"Failed to query Supabase live check for link: {db_err}")
+        return False
+    
 try:
     project_root = os.path.dirname(os.path.abspath(__file__))
     log_dir = os.path.join(project_root, "logs")
@@ -87,8 +128,23 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
                 except Exception as cache_err:
                     logging.warning(f"Could not parse local news cache cleanly: {cache_err}. Defaulting to full processing.")
 
-            fresh_news = [art for art in scraped_news if (art.get("url") or art.get("link")) not in existing_links]
-            
+            fresh_news = []
+            for art in scraped_news:
+                link = art.get("url") or art.get("link")
+                if not link:
+                    continue
+                
+                logging.info(f"Checking live Supabase records for: '{art.get('title')[:30]}...'")
+                
+                # Check live on Supabase instead of local file state
+                analysis_exists = check_gemini_analysis(link)
+                
+                if not analysis_exists:
+                    logging.info(f"Missing or incomplete AI analysis on Supabase. Queuing for Gemini processing.")
+                    fresh_news.append(art)
+                else:
+                    logging.info(f"Healthy AI analysis record confirmed in cloud database. Skipping.")
+
             if not fresh_news:
                 logging.info("All harvested articles already exist in local cache. Wasting 0 Gemini tokens.")
                 SYSTEM_STATE["last_run_status"] = "Success (No fresh news)"

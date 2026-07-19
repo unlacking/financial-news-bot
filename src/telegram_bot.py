@@ -158,7 +158,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = art.get("title", "Untitled Context String")
         link = art.get("link", "#")
         source = art.get("source", "Unknown Nodule")
-        sentiment = art.get("sentiment", "Neutral")
+        sentiment = art.get("sentiment", "error from telegram_bot.py")
         
         block = f"• [{title}]({link})\n   _Source: {source} | Bias: {sentiment}_"
         response_blocks.append(block)

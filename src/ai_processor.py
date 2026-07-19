@@ -9,6 +9,8 @@ from google import genai
 from google.genai.errors import APIError
 from dotenv import load_dotenv
 
+from typing import List, Literal
+
 load_dotenv()
 GEMINI_VERSION = os.getenv("GEMINI_VERSION")
 
@@ -21,7 +23,9 @@ except Exception:
 
 class FinancialAnalysisSchema(BaseModel):
     summary: str = Field(description="A comprehensive 2-3 sentence summary...")
-    sentiment: str = Field(description="The market sentiment direction...")
+    sentiment: Literal["Positive", "Negative", "Neutral"] = Field(
+        description="The market sentiment direction. Use 'Positive' if the news indicates growth, expansion, or buy opportunities. Use 'Negative' if it mentions risks, loss of interest, or declines. Only use 'Neutral' if it is completely purely informational."
+    )
     related_tickers: List[str] = Field(description="List of stock tickers...")
     importance_score: int = Field(
         ge=1, le=5, 
@@ -73,6 +77,11 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
                     "system_instruction": (
                         "You are an elite financial analyst monitoring the Vietnamese stock market.\n"
                         "Analyze the provided news article text and extract structural metadata.\n\n"
+                        "CRITICAL DIRECTION FOR THE 'sentiment' FIELD:\n"
+                        "- Be decisive. If an expert suggests buying or scaling up, it is 'Positive'.\n"
+                        "- If foreign investors are pulling out or a stock is losing traction, it is 'Negative'.\n"
+                        "- Do not default to 'Neutral' unless the article is completely devoid of financial impact.\n\n"
+                        "CRITICAL DIRECTION FOR THE 'summary' FIELD:\n"
                         "CRITICAL DIRECTION FOR THE 'summary' FIELD:\n"
                         "Align your output length, dense tone, and style perfectly with this gold-standard example:\n\n"
                         "Example Input Summary: Vingroup successfully floated $200 million in international bonds on Tuesday to fund sustainable development projects.\n"
@@ -99,7 +108,7 @@ def analyze_article(title: str, summary: str) -> dict:
     """Processes raw text and guarantees a dictionary conforming to the schema."""
     fallback_data = {
         "summary": "Không thể xử lý tóm tắt do quá tải hệ thống.",
-        "sentiment": "Neutral",
+        "sentiment": "error from ai_processor.py",
         "related_tickers": [],
         "importance_score": 3
     }

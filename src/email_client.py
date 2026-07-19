@@ -19,7 +19,7 @@ def build_html_template(prices: list, news: list, analyses: list) -> str:
     # Format stock table rows
     stock_rows = ""
     for p in prices[:20]:  # Limit rows to keep mail light
-        ticker = p.get("ticker", "N/A")
+        ticker = p.get("ticker", "error from email_client.py")
         price = p.get("price", 0)
         pct = p.get("percentage_change", 0)
         color = "#22c55e" if pct >= 0 else "#ef4444"
@@ -40,10 +40,10 @@ def build_html_template(prices: list, news: list, analyses: list) -> str:
         
         # Pull associated Gemini analysis metric if matching index exists
         summary = "No analysis summary available."
-        sentiment = "Neutral"
+        sentiment = "error from email_client.py"
         if idx < len(analyses):
             summary = analyses[idx].get("summary", summary)
-            sentiment = analyses[idx].get("sentiment", "Neutral")
+            sentiment = analyses[idx].get("sentiment", sentiment)
 
         senti_color = "#3b82f6"  # Blue for Neutral
         if sentiment.lower() == "positive": senti_color = "#22c55e"

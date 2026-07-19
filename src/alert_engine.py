@@ -71,7 +71,7 @@ def analyze_news_alerts(news_items: List[Dict[str, Any]], gemini_analyses: List[
         analysis = gemini_analyses[idx]
         title = news.get("title", "")
         summary = analysis.get("summary", "")
-        sentiment = analysis.get("sentiment", "Neutral")
+        sentiment = analysis.get("sentiment", "error from formatter.py")
         importance = analysis.get("importance_score", 3)
         tickers = analysis.get("related_tickers", [])
         

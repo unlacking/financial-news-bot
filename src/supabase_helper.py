@@ -64,7 +64,7 @@ def process_news_batch(data: list, local_path_name: str) -> tuple:
                 print(f"Skipping API call for '{title[:30]}' due to missing/empty article summary.")
                 analysis = {
                     "summary": "Full text summary unavailable for analysis.",
-                    "sentiment": "Neutral",
+                    "sentiment": "error from ai_processor.py",
                     "related_tickers": [],
                     "importance_score": 1
                 }
