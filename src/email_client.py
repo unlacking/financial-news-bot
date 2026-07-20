@@ -24,7 +24,6 @@ except Exception as env_err:
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 
-# Safe integer casting for SMTP port configuration
 try:
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 except (ValueError, TypeError):
@@ -39,32 +38,42 @@ RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL", "")
 # ==============================================================================
 # 2. HTML TEMPLATE BUILDER & DATA FORMATTER
 # ==============================================================================
-def build_html_template(prices: list, news: list, analyses: list) -> str:
+def build_html_template(prices: list, news: list, analyses: list, market_macro: dict = None) -> str:
     """
-    Generates a responsive HTML email layout populated with market prices 
-    and Gemini AI news summaries.
+    Generates a responsive HTML email layout populated with market macro data,
+    stock prices, and Gemini AI news summaries with affected sectors.
+    """
+    # 0. Format Macro Overview Card
+    macro_block = ""
+    if market_macro and isinstance(market_macro, dict):
+        vnindex = market_macro.get("vnindex", "N/A")
+        pts = market_macro.get("change_points", 0.0)
+        liquidity = market_macro.get("liquidity", "N/A")
+        foreign = market_macro.get("foreign_flow", "N/A")
+        macro_color = "#22c55e" if pts >= 0 else "#ef4444"
 
-    :param prices: List of stock price dictionaries.
-    :param news: List of raw news article dictionaries.
-    :param analyses: List of structured AI analysis dictionaries from Gemini.
-    :return: Formatted HTML string ready for email transmission.
-    """
+        macro_block = f"""
+        <div style="background-color: #f1f5f9; padding: 15px; border-radius: 6px; margin-bottom: 25px;">
+            <h4 style="margin: 0 0 10px 0; color: #0f172a;">Tổng Quan Phiên Giao Dịch</h4>
+            <p style="margin: 3px 0; font-size: 14px;"><strong>VN-Index:</strong> {vnindex} (<span style="color: {macro_color}; font-weight: bold;">{pts:+.2f} pts</span>)</p>
+            <p style="margin: 3px 0; font-size: 14px;"><strong>Thanh Khoản:</strong> {liquidity}</p>
+            <p style="margin: 3px 0; font-size: 14px;"><strong>Khối Ngoại:</strong> {foreign}</p>
+        </div>
+        """
+
     # 1. Format stock price table rows safely
     stock_rows = ""
     if prices and isinstance(prices, list):
-        for p in prices[:20]:  # Limit rows to keep payload size light
+        for p in prices[:20]:
             if not isinstance(p, dict):
                 continue
 
             try:
                 ticker = str(p.get("ticker", "N/A")).strip().upper()
-                
                 raw_price = p.get("price", 0)
                 price = float(raw_price) if raw_price is not None else 0.0
-                
                 raw_pct = p.get("percentage_change", 0.0)
                 pct = float(raw_pct) if raw_pct is not None else 0.0
-
                 color = "#22c55e" if pct >= 0 else "#ef4444"
                 
                 stock_rows += f"""
@@ -78,10 +87,19 @@ def build_html_template(prices: list, news: list, analyses: list) -> str:
                 logging.warning(f"Failed to format stock row in email template for item '{p.get('ticker')}': {cast_err}")
                 continue
 
-    # 2. Format news items paired with Gemini AI analysis
+    # 2. Map Gemini analysis outputs by URL key
+    analysis_map = {}
+    if analyses and isinstance(analyses, list):
+        for item in analyses:
+            if isinstance(item, dict):
+                link_key = str(item.get("link") or item.get("url") or "").strip()
+                if link_key:
+                    analysis_map[link_key] = item
+
+    # 3. Format news items paired with Gemini AI analysis
     news_blocks = ""
     if news and isinstance(news, list):
-        for idx, item in enumerate(news):
+        for item in news:
             if not isinstance(item, dict):
                 continue
 
@@ -90,43 +108,51 @@ def build_html_template(prices: list, news: list, analyses: list) -> str:
                 link = str(item.get("link") or item.get("url") or "#").strip()
                 source = str(item.get("source", "Unknown Source")).strip()
                 
-                # Extract matching Gemini analysis payload
-                summary = "No analysis summary available."
-                sentiment = "Neutral"
+                analysis = analysis_map.get(link, {})
                 
-                if (
-                    analyses 
-                    and isinstance(analyses, list) 
-                    and idx < len(analyses) 
-                    and isinstance(analyses[idx], dict)
-                ):
-                    summary = str(analyses[idx].get("summary", summary)).strip()
-                    sentiment = str(analyses[idx].get("sentiment", sentiment)).strip()
+                try:
+                    score = int(analysis.get("importance_score", 3))
+                except (ValueError, TypeError):
+                    score = 3
 
-                senti_color = "#3b82f6"  # Neutral (Blue)
+                # Filter low importance noise
+                if score < 2:
+                    continue
+
+                summary = str(analysis.get("summary", "No AI summary available.")).strip()
+                sentiment = str(analysis.get("sentiment", "Neutral")).strip()
+                sectors = analysis.get("affected_sectors", [])
+                
+                sector_badge = ""
+                if sectors and isinstance(sectors, list):
+                    sector_badge = f" | Ngành tác động: <b>{', '.join(sectors)}</b>"
+
+                senti_color = "#3b82f6"
                 if sentiment.lower() == "positive":
-                    senti_color = "#22c55e"  # Positive (Green)
+                    senti_color = "#22c55e"
                 elif sentiment.lower() == "negative":
-                    senti_color = "#ef4444"  # Negative (Red)
+                    senti_color = "#ef4444"
 
                 news_blocks += f"""
                 <div style="margin-bottom: 20px; padding: 15px; border-left: 4px solid {senti_color}; background-color: #f8fafc;">
                     <h4 style="margin: 0 0 5px 0;"><a href="{link}" style="color: #1e3a8a; text-decoration: none;">{title}</a></h4>
-                    <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">Nguồn: {source} | Thị trường: <span style="color: {senti_color}; font-weight: bold;">{sentiment}</span></p>
+                    <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">Nguồn: {source} | Thị trường: <span style="color: {senti_color}; font-weight: bold;">{sentiment}</span> (Mức độ: {score}/5){sector_badge}</p>
                     <p style="margin: 0; font-size: 14px; color: #334155; line-height: 1.5;">{summary}</p>
                 </div>
                 """
             except Exception as item_err:
-                logging.error(f"Error formatting news block at index {idx} in email template: {item_err}")
+                logging.error(f"Error formatting news block in email template: {item_err}")
                 continue
 
-    # 3. Assemble complete HTML layout
+    # 4. Assemble complete HTML layout
     return f"""
     <html>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; padding: 20px; max-width: 650px; margin: 0 auto;">
         <h2 style="color: #0f172a; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">Bản Tin Tài Chính Hàng Ngày</h2>
-        <p style="color: #64748b;">Tổng hợp thị trường chứng khoán Việt Nam.</p>
+        <p style="color: #64748b;">Tổng hợp diễn biến thị trường chứng khoán Việt Nam.</p>
         
+        {macro_block}
+
         <h3 style="color: #1e3a8a; margin-top: 25px;">1. Biến Động Thị Trường (Top Watchlist)</h3>
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
             <thead>
@@ -142,7 +168,7 @@ def build_html_template(prices: list, news: list, analyses: list) -> str:
         </table>
 
         <h3 style="color: #1e3a8a;">2. Phân Tích Tin Tức & Tóm Tắt AI</h3>
-        {news_blocks if news_blocks else '<p style="color:#64748b;">Không có tin tức mới được xử lý.</p>'}
+        {news_blocks if news_blocks else '<p style="color:#64748b;">Không có tin tức trọng yếu được xử lý.</p>'}
         
         <hr style="border: 0; border-top: 1px solid #e2e8f0; margin-top: 30px;" />
         <p style="font-size: 11px; color: #94a3b8; text-align: center;">Hệ thống tự động phát triển bởi Financial News Bot Client Daemon.</p>
@@ -154,22 +180,15 @@ def build_html_template(prices: list, news: list, analyses: list) -> str:
 # ==============================================================================
 # 3. SMTP DISPATCH & EMAIL TRANSMISSION ENGINE
 # ==============================================================================
-def send_email_digest(prices: list, news: list, analyses: list) -> bool:
+def send_email_digest(prices: list, news: list, analyses: list, market_macro: dict = None) -> bool:
     """
     Builds the HTML newsletter payload and delivers it via SMTP TLS protocol.
-
-    :param prices: List of stock price dictionaries.
-    :param news: List of raw news article dictionaries.
-    :param analyses: List of AI analysis dictionaries from Gemini.
-    :return: Boolean indicating whether email delivery succeeded.
     """
     if not all([SMTP_SERVER, SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL]):
         logging.warning("SMTP configuration parameters missing in environment. Skipping email dispatch.")
         return False
 
-    # Parse comma-separated string into a clean recipient email list
     receiver_list = [email.strip() for email in RECEIVER_EMAIL.split(",") if email.strip()]
-    
     if not receiver_list:
         logging.warning("Recipient email list is empty after parsing. Skipping dispatch.")
         return False
@@ -180,7 +199,7 @@ def send_email_digest(prices: list, news: list, analyses: list) -> bool:
         msg["From"] = SENDER_EMAIL
         msg["To"] = ", ".join(receiver_list) 
 
-        html_content = build_html_template(prices, news, analyses)
+        html_content = build_html_template(prices, news, analyses, market_macro)
         msg.attach(MIMEText(html_content, "html"))
 
         logging.info(f"Connecting to remote SMTP mail server at {SMTP_SERVER}:{SMTP_PORT}...")

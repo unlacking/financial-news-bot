@@ -41,9 +41,6 @@ def send_message(text: str) -> bool:
     """
     Sends a formatted message to the configured Telegram chat or channel.
     Attempts Markdown parsing mode first, with automatic fallback to plain text.
-
-    :param text: Text string payload to deliver.
-    :return: Boolean indicating whether API delivery succeeded.
     """
     if not TELEGRAM_TOKEN or not TELEGRAM_GROUP_CHAT_ID:
         logging.error("Telegram delivery aborted: TELEGRAM_BOT_TOKEN or TELEGRAM_GROUP_CHAT_ID missing.")
@@ -78,8 +75,6 @@ def send_message(text: str) -> bool:
 def send_bulk_messages(messages: list) -> None:
     """
     Delivers a list of string message chunks sequentially with rate-limit pacing delays.
-
-    :param messages: List of string message payloads.
     """
     if not messages or not isinstance(messages, list):
         logging.info("No message payloads provided for bulk distribution.")
@@ -97,7 +92,7 @@ def send_bulk_messages(messages: list) -> None:
             logging.error(f"Failed to deliver message block {idx}/{len(messages)}")
         
         if idx < len(messages):
-            time.sleep(1.5)  # Enforce pacing delay between message deliveries
+            time.sleep(1.5)
 
 
 # ==============================================================================
@@ -195,7 +190,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /news [TICKER]: Queries recent market articles or ticker-specific analysis.
+    /news [TICKER]: Queries recent market articles or ticker-specific analysis with affected sectors.
     """
     if not update.message:
         return
@@ -223,8 +218,12 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             link = art.get("link", "#")
             source = art.get("source", "Unknown Source").strip()
             sentiment = art.get("sentiment", "Neutral").strip()
+            score = art.get("importance_score", 3)
+            sectors = art.get("affected_sectors", [])
+
+            sector_text = f" | Sectors: {', '.join(sectors)}" if sectors and isinstance(sectors, list) else ""
             
-            block = f"• [{title}]({link})\n   _Source: {source} | Sentiment: {sentiment}_"
+            block = f"• [{title}]({link})\n   _Source: {source} | Sentiment: {sentiment} ({score}/5){sector_text}_"
             response_blocks.append(block)
             
         if not response_blocks:
@@ -247,9 +246,6 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==============================================================================
 
 def main():
-    """
-    Initializes the Telegram bot application and starts long-polling listener.
-    """
     if not TELEGRAM_TOKEN:
         logging.error("CRITICAL: Missing TELEGRAM_BOT_TOKEN environment variable.")
         return
@@ -257,7 +253,6 @@ def main():
     try:
         app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-        # Register command handlers
         app.add_handler(CommandHandler("status", status_command))
         app.add_handler(CommandHandler("trigger", trigger_command))
         app.add_handler(CommandHandler("price", price_command))

@@ -38,7 +38,30 @@ GEMINI_TABLE: str = os.getenv("SUPABASE_GEMINI_TABLE", "gemini_responses")
 
 
 # ==============================================================================
-# 2. DATABASE SCHEMA REALIGNMENT & HTTP UPSERT ENGINE
+# 2. SCHEMA REALIGNMENT HELPERS
+# ==============================================================================
+def realign_gemini_payload(gemini_row: dict) -> dict:
+    """
+    Ensures all keys expected by Supabase gemini_responses table exist and are typed correctly.
+    Prevents missing array key exceptions or null column errors during PostgREST upserts.
+    """
+    if not isinstance(gemini_row, dict):
+        return {}
+
+    return {
+        "link": str(gemini_row.get("link", "")).strip(),
+        "prompt_input": str(gemini_row.get("prompt_input", "")),
+        "model_name": str(gemini_row.get("model_name", os.getenv("GEMINI_VERSION", "gemini-3.5-flash"))),
+        "summary": str(gemini_row.get("summary", "")),
+        "sentiment": str(gemini_row.get("sentiment", "Neutral")),
+        "related_tickers": gemini_row.get("related_tickers") if isinstance(gemini_row.get("related_tickers"), list) else [],
+        "affected_sectors": gemini_row.get("affected_sectors") if isinstance(gemini_row.get("affected_sectors"), list) else [],
+        "importance_score": int(gemini_row.get("importance_score", 3))
+    }
+
+
+# ==============================================================================
+# 3. DATABASE SCHEMA REALIGNMENT & HTTP UPSERT ENGINE
 # ==============================================================================
 def insert_json_to_table(local_file_path: str, table_name: str) -> bool:
     """
@@ -89,14 +112,16 @@ def insert_json_to_table(local_file_path: str, table_name: str) -> bool:
             
             # Smart Check: Handle pre-structured arrays directly from memory
             if len(data) > 0 and isinstance(data[0], dict) and "prompt_input" in data[0]:
-                gemini_rows_to_insert = data
+                gemini_rows_to_insert = [realign_gemini_payload(row) for row in data]
                 news_rows_to_insert = []
             elif len(data) > 0 and isinstance(data[0], dict) and "link" in data[0] and "prompt_input" not in data[0]:
                 news_rows_to_insert = data
                 gemini_rows_to_insert = []
             else:
                 # Fallback safeguard sequence using the AI processor module
-                news_rows_to_insert, gemini_rows_to_insert = process_news_batch(data, local_path.name)
+                raw_news, raw_gemini = process_news_batch(data, local_path.name)
+                news_rows_to_insert = raw_news
+                gemini_rows_to_insert = [realign_gemini_payload(row) for row in raw_gemini]
 
             try:
                 news_endpoint = f"{base_url}/rest/v1/{NEWS_TABLE}?on_conflict=link"
@@ -110,10 +135,6 @@ def insert_json_to_table(local_file_path: str, table_name: str) -> bool:
                         logging.error(f"Upload to '{NEWS_TABLE}' rejected (HTTP {news_res.status_code}): {news_res.text}")
                 
                 if gemini_rows_to_insert:
-                    # Adding ?on_conflict=link tells Supabase PostgREST to automatically update 
-                    # the existing row if the article link already exists in the database.
-                    gemini_endpoint = f"{base_url}/rest/v1/{GEMINI_TABLE}?on_conflict=link"
-                    
                     try:
                         gemini_res = httpx.post(
                             gemini_endpoint, 
@@ -176,7 +197,7 @@ def insert_json_to_table(local_file_path: str, table_name: str) -> bool:
 
 
 # ==============================================================================
-# 3. READ-ONLY INTERACTIVE TELEGRAM CLI READ LAYERS
+# 4. READ-ONLY INTERACTIVE TELEGRAM CLI READ LAYERS
 # ==============================================================================
 def check_supabase_connection() -> bool:
     """
@@ -257,6 +278,7 @@ def get_latest_news(ticker: str = None, limit: int = 3) -> list:
             clean_ticker = ticker.strip().upper()
             url = f"{base_url}/rest/v1/{GEMINI_TABLE}"
             params = {
+                "select": "link,summary,sentiment,related_tickers,affected_sectors,importance_score",
                 "related_tickers": f"cs.{{{clean_ticker}}}",  # PostgREST array containment filter
                 "limit": limit
             }

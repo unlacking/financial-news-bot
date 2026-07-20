@@ -3,7 +3,7 @@ GEMINI AI PROCESSOR & BATCH MANAGEMENT ENGINE
 ---------------------------------------------
 This module acts as the core AI analysis component for Phase 1 of the pipeline.
 It handles Pydantic schema validation, rate-limited Gemini API execution,
-ticker symbol filtering, and batch queue management.
+ticker symbol filtering, sector extraction, and batch queue management.
 """
 
 import os
@@ -46,6 +46,10 @@ class FinancialAnalysisSchema(BaseModel):
         description="Market sentiment direction. 'Positive' for growth/opportunities, 'Negative' for risks/decline. 'Neutral' only if purely informational."
     )
     related_tickers: List[str] = Field(description="List of stock tickers mentioned or related to the news.")
+    affected_sectors: List[str] = Field(
+        default=[],
+        description="List of primary economic/industry sectors impacted (e.g., 'Banking', 'Real Estate', 'Securities', 'Steel', 'Energy', 'Retail', 'Technology', 'Aviation')."
+    )
     importance_score: int = Field(
         ge=1, le=5, 
         description="Market importance rating from 1 (very low impact) to 5 (systemic market mover)."
@@ -72,6 +76,21 @@ class FinancialAnalysisSchema(BaseModel):
             return validated_pool
         except Exception as val_err:
             logging.warning(f"Failed to validate ticker pool in Pydantic schema: {val_err}")
+            return []
+
+    @field_validator("affected_sectors")
+    @classmethod
+    def sanitize_sectors(cls, sectors: List[str]) -> List[str]:
+        """
+        Cleans and formats affected industry sector names.
+        """
+        if not sectors or not isinstance(sectors, list):
+            return []
+        try:
+            cleaned = [str(s).strip().title() for s in sectors if s]
+            return list(set(cleaned))
+        except Exception as sec_err:
+            logging.warning(f"Failed to sanitize affected sectors list: {sec_err}")
             return []
 
     @field_validator("importance_score")
@@ -108,8 +127,11 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
                         "- Be decisive. If an expert suggests buying or scaling up, it is 'Positive'.\n"
                         "- If foreign investors are pulling out or a stock is losing traction, it is 'Negative'.\n"
                         "- Do not default to 'Neutral' unless the article is completely devoid of financial impact.\n\n"
+                        "CRITICAL DIRECTION FOR THE 'affected_sectors' FIELD:\n"
+                        "- Identify the primary industry/sector categories impacted by the news article.\n"
+                        "- Use standardized sector names such as 'Banking', 'Real Estate', 'Securities', 'Steel', 'Energy', 'Retail', 'Technology', 'Aviation', etc.\n\n"
                         "CRITICAL DIRECTION FOR THE 'summary' FIELD:\n"
-                        "Align your output length, dense tone, and style perfectly with this gold-standard example:\n\n"
+                        "Align your output length, dense tone, and style perfectly with this gold-standard example (in Vietnamese):\n\n"
                         "Example Input Summary: Vingroup successfully floated $200 million in international bonds on Tuesday to fund sustainable development projects.\n"
                         "Example Output Summary: Vingroup đã phát hành thành công 200 triệu USD trái phiếu quốc tế nhằm tài trợ cho các dự án phát triển bền vững."
                     )
@@ -142,8 +164,9 @@ def analyze_article(title: str, summary: str) -> dict:
     """
     fallback_data = {
         "summary": "Không thể xử lý tóm tắt do quá tải hệ thống hoặc thiếu dữ liệu.",
-        "sentiment": "error from ai_processor.py",
+        "sentiment": "Neutral",
         "related_tickers": [],
+        "affected_sectors": [],
         "importance_score": 3
     }
 
@@ -179,7 +202,7 @@ def analyze_article(title: str, summary: str) -> dict:
 # ==============================================================================
 # 5. NEWS BATCH QUEUE & RATE-LIMIT COOLDOWN PROCESSOR
 # ==============================================================================
-def process_news_batch(data: list, local_path_name: str) -> Tuple[list, list]:
+def process_news_batch(data: list, local_path_name: str = "") -> Tuple[list, list]:
     """
     Processes articles in sub-batches to remain safely beneath free-tier RPM limits.
 
@@ -236,8 +259,9 @@ def process_news_batch(data: list, local_path_name: str) -> Tuple[list, list]:
                     logging.info(f"Bypassing AI call for '{title[:30]}' due to missing summary text.")
                     analysis = {
                         "summary": "Full text summary unavailable for analysis.",
-                        "sentiment": "error from ai_processor.py",
+                        "sentiment": "Neutral",
                         "related_tickers": [],
+                        "affected_sectors": [],
                         "importance_score": 1
                     }
                     
@@ -248,11 +272,12 @@ def process_news_batch(data: list, local_path_name: str) -> Tuple[list, list]:
                     "summary": analysis.get("summary", ""),
                     "sentiment": analysis.get("sentiment", "Neutral"),
                     "related_tickers": analysis.get("related_tickers", []),
+                    "affected_sectors": analysis.get("affected_sectors", []),
                     "importance_score": analysis.get("importance_score", 1)
                 }
                 gemini_rows_to_insert.append(gemini_row)
 
-                time.sleep(1.5) # Gentle spacing delay between requests
+                time.sleep(1.5)  # Gentle spacing delay between requests
 
             except Exception as item_err:
                 logging.error(f"Error processing news row inside batch: {item_err}")

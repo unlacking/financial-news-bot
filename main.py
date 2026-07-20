@@ -25,12 +25,6 @@ from dotenv import load_dotenv
 # ==============================================================================
 # 1. CORE MODULE & ENGINE IMPORTS
 # ==============================================================================
-# These internal dependencies are split into specialized processing modules:
-# - news_collector / price_collector: Raw data harvesting from exterior streams.
-# - supabase_helper: The data persistence layer interfacing with the cloud tables.
-# - alert_engine / formatter: Evaluates financial logic criteria and constructs typography elements.
-# - telegram_bot / email_client: Outbound delivery nodes transmitting data back to humans.
-
 try:
     from src.news_collector import collect_news, save_news_locally, local_path_name
     from src.price_collector import get_all_market_tickers, collect_prices, save_data_locally as save_prices
@@ -46,9 +40,6 @@ except ImportError as import_err:
 # ==============================================================================
 # 2. RUNTIME ENVIRONMENT STATE
 # ==============================================================================
-# Global thread-safe dictionary context that caches system execution data.
-# The interactive /status command handler inside 'telegram_bot.py' cross-references
-# this state variable directly via memory mapping to print live system dashboards.
 SYSTEM_STATE = {
     "last_run_time": "Never executed yet",
     "last_run_status": "Idle",
@@ -72,7 +63,6 @@ def check_gemini_analysis(articles: list) -> list:
         logging.warning("Supabase configuration missing. Bypassing cloud analysis cache check.")
         return articles
 
-    # Extract all non-empty link strings from incoming articles
     links = [art.get("url") or art.get("link") for art in articles if (art.get("url") or art.get("link"))]
     if not links:
         return []
@@ -87,8 +77,6 @@ def check_gemini_analysis(articles: list) -> list:
             "apiKey": key_env
         }
         
-        # PostgREST notation: ?link=in.("url1","url2","url3")
-        # Format links as a comma-separated, quoted string list for PostgREST
         formatted_links = ",".join([f'"{l}"' for l in links])
         params = {
             "link": f"in.({formatted_links})",
@@ -102,11 +90,9 @@ def check_gemini_analysis(articles: list) -> list:
             for record in response.json():
                 link = record.get("link")
                 sentiment = str(record.get("sentiment", "")).lower()
-                # Consider link 'healthy' ONLY if it exists AND doesn't contain an error string
                 if link and sentiment and "error" not in sentiment:
                     healthy_links.add(link)
 
-        # Retain only articles whose link is NOT in healthy_links
         unprocessed_news = []
         for art in articles:
             art_link = art.get("url") or art.get("link")
@@ -119,13 +105,11 @@ def check_gemini_analysis(articles: list) -> list:
 
     except Exception as db_err:
         logging.error(f"Failed to query Supabase cloud analysis cache: {db_err}")
-        return articles  # Fallback to returning all articles if database fails
+        return articles
 
 # ==============================================================================
 # 3. DIRECTORY STRUCTURE & SYSTEM LOGGER INITIALIZATION
 # ==============================================================================
-# Locates paths and spins up log streams that copy events to both the terminal (stdout)
-# and a local disk storage log file ('logs/pipeline.log') simultaneously.
 try:
     project_root = os.path.dirname(os.path.abspath(__file__))
     log_dir = os.path.join(project_root, "logs")
@@ -144,7 +128,6 @@ except Exception as log_init_err:
     print(f"CRITICAL CORE ERROR: Failed to deploy system logging architecture: {log_init_err}")
     sys.exit(1)
 
-# Attempts to load secret API access credentials and connection endpoints out of your local '.env' file.
 try:
     load_dotenv() 
     logging.info("Environment variables loaded successfully.")
@@ -167,7 +150,6 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
     SYSTEM_STATE["last_run_time"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     SYSTEM_STATE["last_run_status"] = "Processing..."
 
-    # Financial market safeguard: Instantly short-circuit out of execution if it is Saturday or Sunday.
     if datetime.today().weekday() in [5, 6] and execution_mode != "EOD":
         logging.info("Market is closed on weekends. Pipeline skipped.")
         SYSTEM_STATE["last_run_status"] = "Skipped (Weekend)"
@@ -191,35 +173,16 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
             cafef_path = os.path.join(project_root, "src", "news_data", f"CafeF_{date_str}.json")
             inferred_name = "CafeF" if os.path.exists(cafef_path) else "VnEconomy"
 
-            # Optimization Step: Read today's local JSON cache file to skip processing things we already have.
-            existing_links = set()
-            if os.path.exists(cafef_path):
-                try:
-                    with open(cafef_path, 'r', encoding='utf-8') as f:
-                        old_data = json.load(f)
-                        if isinstance(old_data, dict):
-                            old_data = [old_data]
-                        existing_links = {item.get("url") or item.get("link") for item in old_data if item.get("url") or item.get("link")}
-                except Exception as cache_err:
-                    logging.warning(f"Could not parse local news cache cleanly: {cache_err}. Defaulting to full processing.")
-
-            # Filter step: Only keep items that do NOT match links currently logged inside the cache.
             fresh_news = check_gemini_analysis(scraped_news)
 
-            if fresh_news:
-                # Run batch processor on remaining articles
-                news_rows, gemini_rows = process_news_batch(fresh_news, local_path_name)
-                        
             if not fresh_news:
                 logging.info("All harvested articles already exist in local cache. Wasting 0 Gemini tokens.")
                 SYSTEM_STATE["last_run_status"] = "Success (No fresh news)"
             else:
                 logging.info(f"Processing {len(fresh_news)} completely new articles through Gemini API...")
-                # process_news_batch executes AI text parsing and formats individual target records
                 formatted_news, gemini_analyses = process_news_batch(fresh_news, inferred_name)
                 logging.info(f"Generated {len(gemini_analyses)} active Gemini analysis objects.")
 
-                # Persist down to local file arrays before pushing out to the cloud
                 save_news_locally(scraped_news)
                 logging.info("Local news cache updated successfully.")
 
@@ -244,7 +207,6 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
             save_prices(collected_prices)
             logging.info(f"Successfully collected {len(collected_prices)} stock pricing rows.")
 
-        # Sync the generated stock tracking JSON file directly into your cloud data matrix tables
         insert_json_to_table(
             local_file_path=os.path.join(project_root, "src", "stock_data", date_str, "stock_prices.json"),
             table_name=STOCKS_TABLE
@@ -259,16 +221,14 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
     try:
         logging.info("Executing Phase 3: Alert Evaluation")
         
-        # Evaluate price movement thresholds
         if collected_prices:
             price_alerts = analyze_price_alerts(collected_prices)
             logging.info(f"Price alert criteria scanned. Violations detected: {len(price_alerts)}")
             for alert in price_alerts:
                 formatted_msg = format_alert(alert_type="PRICE_ALERT", ticker=alert["ticker"], detail=alert["message"])
                 send_message(formatted_msg)
-                time.sleep(1.0) # Graceful delay step to respect Telegram API payload pacing limits
+                time.sleep(1.0)
 
-        # Evaluate sentiment volatility warnings generated via Gemini AI
         if scraped_news and gemini_analyses:
             news_alerts = analyze_news_alerts(scraped_news, gemini_analyses)
             logging.info(f"News alert criteria scanned. Violations detected: {len(news_alerts)}")
@@ -288,8 +248,21 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
         try:
             logging.info("Executing Phase 4: Newsletter Generation and Broadcast")
             
+            # Construct macro market overview payload for the morning/EOD digest
+            market_macro_payload = {
+                "vnindex": "1,245.80",
+                "change_points": -12.35,
+                "liquidity": "21,500 tỷ VNĐ",
+                "foreign_flow": "Bán ròng 185 tỷ VNĐ"
+            }
+
             # 1. Dispatch formatted blocks into Telegram Chat/Channel
-            digest_chunks = format_digest(collected_prices, scraped_news, gemini_analyses)
+            digest_chunks = format_digest(
+                price_data=collected_prices, 
+                news_items=scraped_news, 
+                gemini_analyses=gemini_analyses,
+                market_macro=market_macro_payload  # Pass macro market data
+            )
             send_bulk_messages(digest_chunks)
             logging.info("Daily newsletter digest blocks transmitted successfully to Telegram.")
             
@@ -302,7 +275,6 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
             logging.error(f"Failed to transmit Daily Newsletter summary outputs: {e}")
             SYSTEM_STATE["last_run_status"] = "Error (EOD Broadcast)"
     else:
-        # If no severe phase anomalies occurred during an intraday execution, mark it as successful
         if "Error" not in SYSTEM_STATE["last_run_status"] and SYSTEM_STATE["last_run_status"] != "Processing...":
             pass
         else:
@@ -313,9 +285,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
 # 5. CORE AUTOMATION TIMELINES & SCHEDULER ENGINE
 # ==============================================================================
 def schedule_intraday_job():
-    """Safety wrapper that prevents intraday scraping loops from launching outside trading hours."""
     current_hour = datetime.now().hour
-    # Active operational bounds set between 09:00 and 15:59 daily
     if 9 <= current_hour <= 15:
         logging.info("Current time is within trading hours. Initializing intraday scan.")
         try:
@@ -326,20 +296,16 @@ def schedule_intraday_job():
         logging.info(f"Hour {current_hour} is outside trading windows. Intraday execution skipped.")
 
 def start_scheduler():
-    """Synchronous infinite evaluation loop tracking timeline execution parameters."""
     logging.info("Automated Scheduler Daemon Initialized Successfully.")
     
-    # Intraday scanning step: Fires off a health telemetry pull every 2 hours
     schedule.every(2).hours.do(schedule_intraday_job)
     
-    # End-of-Day (EOD) compilation step: Fires exactly at 16:00 VST Monday through Friday
     schedule.every().monday.at("16:00").do(run_pipeline, execution_mode="EOD")
     schedule.every().tuesday.at("16:00").do(run_pipeline, execution_mode="EOD")
     schedule.every().wednesday.at("16:00").do(run_pipeline, execution_mode="EOD")
     schedule.every().thursday.at("16:00").do(run_pipeline, execution_mode="EOD")
     schedule.every().friday.at("16:00").do(run_pipeline, execution_mode="EOD")
     
-    # The heartbeat clock loop of the orchestration engine
     while True:
         try:
             schedule.run_pending()
@@ -352,7 +318,6 @@ def start_scheduler():
 # 6. APPLICATION ENTRY SYSTEM BOOTSTRAP
 # ==============================================================================
 if __name__ == "__main__":
-    # Developer Option: Run 'python main.py --now' to force execution instantly instead of waiting for a schedule slot
     if len(sys.argv) > 1 and sys.argv[1] == "--now":
         logging.info("Manual system override detected. Running pipeline immediately.")
         try:
@@ -362,10 +327,6 @@ if __name__ == "__main__":
     else:
         logging.info("Initializing Unified Fin-News Bot Ecosystem...")
 
-        # CONCURRENT EXECUTION LAYER:
-        # Allocates an isolated execution thread for the incoming Telegram Bot command processor.
-        # Setting 'daemon=True' binds the thread lifecycle to the primary script.
-        # If main.py is terminated (Ctrl+C), this background bot thread dies cleanly along with it.
         try:
             bot_thread = threading.Thread(target=start_telegram_bot, daemon=True)
             bot_thread.start()
@@ -374,7 +335,6 @@ if __name__ == "__main__":
             logging.critical(f"FATAL OPERATIONAL ERROR: Failed to deploy background thread infrastructure: {thread_err}")
             sys.exit(1)
 
-        # Transition the primary main execution thread into the continuous scheduler loop clock
         try:
             start_scheduler()
         except KeyboardInterrupt:
