@@ -49,7 +49,7 @@ An automated, data-driven market intelligence pipeline designed to periodically 
 
 | Component | Technology / Library | Purpose |
 | --- | --- | --- |
-| **Runtime** | Python 3.11+ | Core execution environment |
+| **Runtime** | Python 3.11.9 | Core execution environment |
 | **News Parser** | `feedparser` | Fetching and parsing live financial RSS streams |
 | **Stock Data** | `vnstock` | Interrogating real-time Vietnamese stock market metrics |
 | **Database** | Supabase (PostgREST API) | Real-time cloud storage & relational schema hosting |
