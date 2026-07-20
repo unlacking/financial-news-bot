@@ -77,7 +77,7 @@ def format_digest(price_data: List[Dict[str, Any]], news_items: List[Dict[str, A
             title = news.get("title", "No Title")
             source = news.get("source", "Unknown")
             summary = analysis.get("summary", "No summary available.")
-            sentiment = analysis.get("sentiment", "error from formatter.py")
+            sentiment = analysis.get("sentiment", "errorFORMATTER").strip()
             score = analysis.get("importance_score", 3)
             
             item_text = (

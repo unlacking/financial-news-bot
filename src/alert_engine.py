@@ -127,7 +127,7 @@ def analyze_news_alerts(news_items: List[Dict[str, Any]], gemini_analyses: List[
 
             title = news.get("title", "Untitled Article").strip()
             summary = analysis.get("summary", "").strip()
-            sentiment = analysis.get("sentiment", "error from alert_engine.py").strip()
+            sentiment = analysis.get("sentiment", "errorALERT").strip()
             
             # Safe casting for importance score
             try:

@@ -217,7 +217,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title = art.get("title", "Untitled Article").strip()
             link = art.get("link", "#")
             source = art.get("source", "Unknown Source").strip()
-            sentiment = art.get("sentiment", "error from telegram_bot.py").strip()
+            sentiment = art.get("sentiment", "errorTELEGRAM").strip()
             score = art.get("importance_score", 3)
             sectors = art.get("affected_sectors", [])
 

@@ -164,7 +164,7 @@ def analyze_article(title: str, summary: str) -> dict:
     """
     fallback_data = {
         "summary": "Không thể xử lý tóm tắt do quá tải hệ thống hoặc thiếu dữ liệu.",
-        "sentiment": "error from ai_processor.py",
+        "sentiment": "errorAI",
         "related_tickers": [],
         "affected_sectors": [],
         "importance_score": 3
@@ -259,7 +259,7 @@ def process_news_batch(data: list, local_path_name: str = "") -> Tuple[list, lis
                     logging.info(f"Bypassing AI call for '{title[:30]}' due to missing summary text.")
                     analysis = {
                         "summary": "Full text summary unavailable for analysis.",
-                        "sentiment": "error from ai_processor.py",
+                        "sentiment": "errorAI",
                         "related_tickers": [],
                         "affected_sectors": [],
                         "importance_score": 1
@@ -270,7 +270,7 @@ def process_news_batch(data: list, local_path_name: str = "") -> Tuple[list, lis
                     "prompt_input": f"Title: {title}\nSummary: {summary[:200] if summary else 'None'}...",
                     "model_name": GEMINI_VERSION,
                     "summary": analysis.get("summary", ""),
-                    "sentiment": analysis.get("sentiment", "error from ai_processor.py"),
+                    "sentiment": analysis.get("sentiment", "errorAI"),
                     "related_tickers": analysis.get("related_tickers", []),
                     "affected_sectors": analysis.get("affected_sectors", []),
                     "importance_score": analysis.get("importance_score", 1)
