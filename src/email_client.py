@@ -120,7 +120,7 @@ def build_html_template(prices: list, news: list, analyses: list, market_macro: 
                     continue
 
                 summary = str(analysis.get("summary", "No AI summary available.")).strip()
-                sentiment = str(analysis.get("sentiment", "Neutral")).strip()
+                sentiment = str(analysis.get("sentiment", "error from email_client.py")).strip()
                 sectors = analysis.get("affected_sectors", [])
                 
                 sector_badge = ""

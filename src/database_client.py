@@ -53,7 +53,7 @@ def realign_gemini_payload(gemini_row: dict) -> dict:
         "prompt_input": str(gemini_row.get("prompt_input", "")),
         "model_name": str(gemini_row.get("model_name", os.getenv("GEMINI_VERSION", "gemini-3.5-flash"))),
         "summary": str(gemini_row.get("summary", "")),
-        "sentiment": str(gemini_row.get("sentiment", "Neutral")),
+        "sentiment": str(gemini_row.get("sentiment", "error from database_client.py")),
         "related_tickers": gemini_row.get("related_tickers") if isinstance(gemini_row.get("related_tickers"), list) else [],
         "affected_sectors": gemini_row.get("affected_sectors") if isinstance(gemini_row.get("affected_sectors"), list) else [],
         "importance_score": int(gemini_row.get("importance_score", 3))
