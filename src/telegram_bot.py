@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 
 # Absolute path import relative to project root execution
-from src.supabase_helper import check_supabase_connection, get_stock_price, get_latest_news
+from src.database_client import check_supabase_connection, get_stock_price, get_latest_news
 
 load_dotenv()
 

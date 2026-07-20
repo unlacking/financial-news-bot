@@ -1,56 +1,78 @@
+"""
+GEMINI AI PROCESSOR & BATCH MANAGEMENT ENGINE
+---------------------------------------------
+This module acts as the core AI analysis component for Phase 1 of the pipeline.
+It handles Pydantic schema validation, rate-limited Gemini API execution,
+ticker symbol filtering, and batch queue management.
+"""
+
 import os
 import json
 import time
 import random
-from typing import List
+import logging
+from typing import List, Literal, Tuple, Dict, Any
 from pydantic import BaseModel, Field, field_validator
-from src.price_collector import get_all_market_tickers
 from google import genai
 from google.genai.errors import APIError
 from dotenv import load_dotenv
 
-from typing import List, Literal
+from src.price_collector import get_all_market_tickers
 
-load_dotenv()
-GEMINI_VERSION = os.getenv("GEMINI_VERSION")
+# ==============================================================================
+# 1. ENVIRONMENT & MARKET TICKER CACHE
+# ==============================================================================
+try:
+    load_dotenv()
+except Exception as env_err:
+    logging.warning(f"Non-fatal warning: Failed to map .env configuration in ai_processor: {env_err}")
 
-# Cache the official active 3-character ticker pool once at compilation time
+GEMINI_VERSION: str = os.getenv("GEMINI_VERSION", "gemini-3.5-flash")
+
+# Cache official active 3-character ticker pool once at module load
 try:
     VALID_VIETNAMESE_TICKERS = set(get_all_market_tickers())
-except Exception:
-    # Fallback to standard high-cap anchors if the network collector goes down
-    VALID_VIETNAMESE_TICKERS = {"VCB", "FPT", "HPG", "VNM", "VIC", "VRE", "MSN"}
+except Exception as ticker_cache_err:
+    logging.warning(f"Failed to fetch dynamic ticker list for validation: {ticker_cache_err}. Using fallback pool.")
+    VALID_VIETNAMESE_TICKERS = {"VCB", "FPT", "HPG", "VNM", "VIC", "VRE", "MSN", "TCB", "MBB", "ACB"}
 
+
+# ==============================================================================
+# 2. PYDANTIC OUTPUT SCHEMA & VALIDATION
+# ==============================================================================
 class FinancialAnalysisSchema(BaseModel):
-    summary: str = Field(description="A comprehensive 2-3 sentence summary...")
+    summary: str = Field(description="A comprehensive 2-3 sentence summary in Vietnamese.")
     sentiment: Literal["Positive", "Negative", "Neutral"] = Field(
-        description="The market sentiment direction. Use 'Positive' if the news indicates growth, expansion, or buy opportunities. Use 'Negative' if it mentions risks, loss of interest, or declines. Only use 'Neutral' if it is completely purely informational."
+        description="Market sentiment direction. 'Positive' for growth/opportunities, 'Negative' for risks/decline. 'Neutral' only if purely informational."
     )
-    related_tickers: List[str] = Field(description="List of stock tickers...")
+    related_tickers: List[str] = Field(description="List of stock tickers mentioned or related to the news.")
     importance_score: int = Field(
         ge=1, le=5, 
-        description="Market importance rating from 1 (very low impact) to 5 (massive market mover/systemic news)."
+        description="Market importance rating from 1 (very low impact) to 5 (systemic market mover)."
     )
 
     @field_validator("related_tickers")
     @classmethod
     def filter_and_validate_tickers(cls, tickers: List[str]) -> List[str]:
         """
-        Intersects the AI-generated list against live listed market assets.
-        Forces formatting compliance and eliminates out-of-bounds hallucinations.
+        Intersects the AI-generated ticker list against live listed market assets.
+        Forces uppercase formatting and eliminates hallucinated ticker strings.
         """
-        # Clean format string structures (Force Uppercase & strip whitespace)
-        cleaned_tickers = [str(t).strip().upper() for t in tickers]
-        
-        # Perform a Set-Intersection to extract ONLY valid listed market assets
-        validated_pool = list(set(cleaned_tickers).intersection(VALID_VIETNAMESE_TICKERS))
-        
-        # Log a warning terminal note if tickers were filtered out
-        dropped = set(cleaned_tickers) - set(validated_pool)
-        if dropped:
-            print(f"Validation Note: Dropped unlisted/invalid tickers: {dropped}")
+        if not tickers:
+            return []
+
+        try:
+            cleaned_tickers = [str(t).strip().upper() for t in tickers if t]
+            validated_pool = list(set(cleaned_tickers).intersection(VALID_VIETNAMESE_TICKERS))
             
-        return validated_pool
+            dropped = set(cleaned_tickers) - set(validated_pool)
+            if dropped:
+                logging.info(f"Validation Note: Filtered out unlisted/invalid tickers: {dropped}")
+                
+            return validated_pool
+        except Exception as val_err:
+            logging.warning(f"Failed to validate ticker pool in Pydantic schema: {val_err}")
+            return []
 
     @field_validator("importance_score")
     @classmethod
@@ -60,8 +82,13 @@ class FinancialAnalysisSchema(BaseModel):
         return value
 
 
+# ==============================================================================
+# 3. GEMINI API CALL WITH EXPONENTIAL BACKOFF
+# ==============================================================================
 def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
-    """Executes the raw Gemini API call handling rate limits (429)."""
+    """
+    Executes raw Gemini API calls handling HTTP 429 rate limits using exponential backoff.
+    """
     client = genai.Client()
     base_delay = 2.0
 
@@ -82,7 +109,6 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
                         "- If foreign investors are pulling out or a stock is losing traction, it is 'Negative'.\n"
                         "- Do not default to 'Neutral' unless the article is completely devoid of financial impact.\n\n"
                         "CRITICAL DIRECTION FOR THE 'summary' FIELD:\n"
-                        "CRITICAL DIRECTION FOR THE 'summary' FIELD:\n"
                         "Align your output length, dense tone, and style perfectly with this gold-standard example:\n\n"
                         "Example Input Summary: Vingroup successfully floated $200 million in international bonds on Tuesday to fund sustainable development projects.\n"
                         "Example Output Summary: Vingroup đã phát hành thành công 200 triệu USD trái phiếu quốc tế nhằm tài trợ cho các dự án phát triển bền vững."
@@ -92,50 +118,149 @@ def _call_gemini_with_backoff(prompt: str, max_retries: int = 5) -> str:
             return response.text.strip()
 
         except APIError as e:
-            if e.code == 429:
+            if getattr(e, 'code', None) == 429 or "429" in str(e):
                 delay = (base_delay * (2 ** attempt)) + random.random()
-                print(f"Rate Limit Hit (HTTP 429). Retrying in {delay:.2f}s...")
+                logging.warning(f"Rate limit hit (HTTP 429). Retrying in {delay:.2f} seconds (Attempt {attempt + 1}/{max_retries})...")
                 time.sleep(delay)
             else:
+                logging.error(f"Gemini API Error encounter: {e}")
                 raise e
         except Exception as e:
+            logging.error(f"Unexpected error during Gemini API invocation: {e}")
             raise e
 
-    raise Exception("Execution failed: Max retries exceeded due to rate limiting.")
+    raise Exception("Gemini execution failed: Exceeded maximum retries due to rate limiting.")
 
 
+# ==============================================================================
+# 4. SINGLE ARTICLE ANALYSIS ENTRY POINT
+# ==============================================================================
 def analyze_article(title: str, summary: str) -> dict:
-    """Processes raw text and guarantees a dictionary conforming to the schema."""
+    """
+    Cleans incoming title/summary text, executes Gemini analysis,
+    and returns a structured dictionary matching FinancialAnalysisSchema.
+    """
     fallback_data = {
-        "summary": "Không thể xử lý tóm tắt do quá tải hệ thống.",
+        "summary": "Không thể xử lý tóm tắt do quá tải hệ thống hoặc thiếu dữ liệu.",
         "sentiment": "error from ai_processor.py",
         "related_tickers": [],
         "importance_score": 3
     }
 
-    # Clean the input strings to prevent whitespace-only bypasses
-    clean_summary = summary.strip() if summary else ""
-    clean_title = title.strip() if title else ""
+    clean_summary = summary.strip() if summary and isinstance(summary, str) else ""
+    clean_title = title.strip() if title and isinstance(title, str) else ""
 
     placeholders = {"no summary text available.", "none", "null", "undefined", ""}
     
-    if (
-        not clean_summary 
-        or len(clean_summary) < 10 
-        or clean_summary.lower() in placeholders
-    ):
-        # If the title contains real information, salvage the analysis by falling back to the headline context
+    # Check for empty or missing summary text
+    if not clean_summary or len(clean_summary) < 10 or clean_summary.lower() in placeholders:
         if len(clean_title) > 10:
-            print(f"Notice: Missing summary text. Downgrading context scope to Title only for: {clean_title[:30]}...")
+            logging.info(f"Missing summary text. Downgrading context scope to Title only for: '{clean_title[:30]}...'")
             summary = "No extended summary text provided. Base your analysis strictly on the headline title."
         else:
-            print(f"Resource Guard: Dropping '{clean_title[:30]}' due to completely empty/invalid summary context.")
+            logging.warning(f"Skipping AI analysis for '{clean_title[:30]}' due to missing title and summary context.")
             return fallback_data
 
     try:
         prompt = f"Title: {title}\nSummary: {summary[:200] if summary else 'None'}..."
         raw_json_output = _call_gemini_with_backoff(prompt)
-        return json.loads(raw_json_output)
-    except Exception as final_err:
-        print(f"AI Processor Error: {final_err}")
+        parsed_result = json.loads(raw_json_output)
+        if isinstance(parsed_result, dict):
+            return parsed_result
         return fallback_data
+    except json.JSONDecodeError as json_err:
+        logging.error(f"Failed to parse Gemini output JSON: {json_err}")
+        return fallback_data
+    except Exception as final_err:
+        logging.error(f"AI Processor failure for '{clean_title[:30]}': {final_err}")
+        return fallback_data
+
+
+# ==============================================================================
+# 5. NEWS BATCH QUEUE & RATE-LIMIT COOLDOWN PROCESSOR
+# ==============================================================================
+def process_news_batch(data: list, local_path_name: str) -> Tuple[list, list]:
+    """
+    Processes articles in sub-batches to remain safely beneath free-tier RPM limits.
+
+    :param data: List of raw news article dictionaries.
+    :param local_path_name: File path name string used to infer source publication.
+    :return: Tuple containing (news_rows_to_insert, gemini_rows_to_insert).
+    """
+    if not data or not isinstance(data, list):
+        logging.info("No news data provided to process_news_batch. Processing bypassed.")
+        return [], []
+
+    news_rows_to_insert = []
+    gemini_rows_to_insert = []
+    
+    BATCH_SIZE = 10  
+    COOLDOWN_PERIOD = 65  # Pause duration in seconds between sub-batches
+    
+    for i in range(0, len(data), BATCH_SIZE):
+        batch = data[i:i + BATCH_SIZE]
+        logging.info(f"Processing Gemini AI sub-batch {i // BATCH_SIZE + 1} ({len(batch)} articles)...")
+        
+        for row in batch:
+            if not isinstance(row, dict):
+                continue
+
+            try:
+                # Infer source publisher label
+                inferred_source = "Unknown"
+                sources_map = ["CafeF", "VnEconomy", "Vietstock"]
+                for src in sources_map:
+                    if src.lower() in str(local_path_name).lower():
+                        inferred_source = src
+                        break
+
+                published_at = row.get("published_at")
+                link = row.get("url") or row.get("link", "")
+                title = row.get("title", "Untitled Article").strip()
+                summary = row.get("summary", "").strip()
+
+                news_row = {
+                    "source": row.get("source") or inferred_source,
+                    "title": title,
+                    "link": link,
+                    "published_at": published_at,
+                    "summary": summary
+                }
+                news_rows_to_insert.append(news_row)
+                
+                # Execute AI analysis if valid text is present
+                if summary and len(summary) > 10:
+                    logging.info(f"Submitting article to Gemini AI layer: '{title[:30]}...'")
+                    analysis = analyze_article(title, summary)
+                else:
+                    logging.info(f"Bypassing AI call for '{title[:30]}' due to missing summary text.")
+                    analysis = {
+                        "summary": "Full text summary unavailable for analysis.",
+                        "sentiment": "error from ai_processor.py",
+                        "related_tickers": [],
+                        "importance_score": 1
+                    }
+                    
+                gemini_row = {
+                    "link": link,
+                    "prompt_input": f"Title: {title}\nSummary: {summary[:200] if summary else 'None'}...",
+                    "model_name": GEMINI_VERSION,
+                    "summary": analysis.get("summary", ""),
+                    "sentiment": analysis.get("sentiment", "Neutral"),
+                    "related_tickers": analysis.get("related_tickers", []),
+                    "importance_score": analysis.get("importance_score", 1)
+                }
+                gemini_rows_to_insert.append(gemini_row)
+
+                time.sleep(1.5) # Gentle spacing delay between requests
+
+            except Exception as item_err:
+                logging.error(f"Error processing news row inside batch: {item_err}")
+                continue
+        
+        # Enforce cooldown pause between sub-batches
+        if i + BATCH_SIZE < len(data):
+            logging.info(f"Approaching API rate limit threshold. Pausing execution for {COOLDOWN_PERIOD} seconds...")
+            time.sleep(COOLDOWN_PERIOD)
+            
+    return news_rows_to_insert, gemini_rows_to_insert

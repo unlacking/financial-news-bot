@@ -15,6 +15,8 @@ import sys
 import time
 import logging
 import json
+import httpx
+from urllib.parse import urlparse
 from datetime import datetime
 import threading
 import schedule 
@@ -30,9 +32,9 @@ from dotenv import load_dotenv
 # - telegram_bot / email_client: Outbound delivery nodes transmitting data back to humans.
 
 try:
-    from src.news_collector import collect_news, save_news_locally
+    from src.news_collector import collect_news, save_news_locally, local_path_name
     from src.price_collector import get_all_market_tickers, collect_prices, save_data_locally as save_prices
-    from src.supabase_helper import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, process_news_batch
+    from src.database_client import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, process_news_batch
     from src.alert_engine import analyze_price_alerts, analyze_news_alerts
     from src.formatter import format_alert, format_digest
     from src.telegram_bot import send_message, send_bulk_messages, main as start_telegram_bot
@@ -52,6 +54,72 @@ SYSTEM_STATE = {
     "last_run_status": "Idle",
     "scheduler_active": True
 }
+
+def check_gemini_analysis(articles: list) -> list:
+    """
+    Queries Supabase in a single HTTP request to fetch existing links.
+    Returns only the articles that are either missing from the database 
+    or contain an error state requiring a re-run.
+    """
+    if not articles or not isinstance(articles, list):
+        return []
+
+    url_env = os.getenv("SUPABASE_URL")
+    key_env = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    gemini_table = os.getenv("SUPABASE_GEMINI_TABLE", "gemini_responses")
+
+    if not url_env or not key_env:
+        logging.warning("Supabase configuration missing. Bypassing cloud analysis cache check.")
+        return articles
+
+    # Extract all non-empty link strings from incoming articles
+    links = [art.get("url") or art.get("link") for art in articles if (art.get("url") or art.get("link"))]
+    if not links:
+        return []
+
+    try:
+        parsed_url = urlparse(url_env)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        endpoint = f"{base_url}/rest/v1/{gemini_table}"
+
+        headers = {
+            "Authorization": f"Bearer {key_env}",
+            "apiKey": key_env
+        }
+        
+        # PostgREST notation: ?link=in.("url1","url2","url3")
+        # Format links as a comma-separated, quoted string list for PostgREST
+        formatted_links = ",".join([f'"{l}"' for l in links])
+        params = {
+            "link": f"in.({formatted_links})",
+            "select": "link,sentiment"
+        }
+
+        response = httpx.get(endpoint, headers=headers, params=params, timeout=8.0)
+        
+        healthy_links = set()
+        if response.status_code == 200 and isinstance(response.json(), list):
+            for record in response.json():
+                link = record.get("link")
+                sentiment = str(record.get("sentiment", "")).lower()
+                # Consider link 'healthy' ONLY if it exists AND doesn't contain an error string
+                if link and sentiment and "error" not in sentiment:
+                    healthy_links.add(link)
+
+        # Retain only articles whose link is NOT in healthy_links
+        unprocessed_news = []
+        for art in articles:
+            art_link = art.get("url") or art.get("link")
+            if art_link not in healthy_links:
+                unprocessed_news.append(art)
+
+        skipped_count = len(articles) - len(unprocessed_news)
+        logging.info(f"Cloud DB cache check complete: {skipped_count} healthy records skipped, {len(unprocessed_news)} queued for processing.")
+        return unprocessed_news
+
+    except Exception as db_err:
+        logging.error(f"Failed to query Supabase cloud analysis cache: {db_err}")
+        return articles  # Fallback to returning all articles if database fails
 
 # ==============================================================================
 # 3. DIRECTORY STRUCTURE & SYSTEM LOGGER INITIALIZATION
@@ -136,8 +204,12 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
                     logging.warning(f"Could not parse local news cache cleanly: {cache_err}. Defaulting to full processing.")
 
             # Filter step: Only keep items that do NOT match links currently logged inside the cache.
-            fresh_news = [art for art in scraped_news if (art.get("url") or art.get("link")) not in existing_links]
-            
+            fresh_news = check_gemini_analysis(scraped_news)
+
+            if fresh_news:
+                # Run batch processor on remaining articles
+                news_rows, gemini_rows = process_news_batch(fresh_news, local_path_name)
+                        
             if not fresh_news:
                 logging.info("All harvested articles already exist in local cache. Wasting 0 Gemini tokens.")
                 SYSTEM_STATE["last_run_status"] = "Success (No fresh news)"
