@@ -105,22 +105,38 @@ def format_digest(price_data: List[Dict[str, Any]], news_items: List[Dict[str, A
     if news_items and isinstance(news_items, list):
         current_chunk.append("FEATURED ANALYSIS & NEWS\n")
         
-        for idx, news in enumerate(news_items):
+        # Map analyses by article URL to prevent index-mismatch and title/summary shifting
+        analysis_map = {}
+        if gemini_analyses and isinstance(gemini_analyses, list):
+            for item in gemini_analyses:
+                if isinstance(item, dict):
+                    link_key = str(item.get("link") or item.get("url") or "").strip()
+                    if link_key:
+                        analysis_map[link_key] = item
+
+        for news in news_items:
             if not isinstance(news, dict):
                 continue
 
             try:
-                analysis = gemini_analyses[idx] if (gemini_analyses and isinstance(gemini_analyses, list) and idx < len(gemini_analyses) and isinstance(gemini_analyses[idx], dict)) else {}
-                
                 title = news.get("title", "Untitled Article").strip()
                 source = news.get("source", "Unknown Source").strip()
-                summary = analysis.get("summary", "No AI summary available.").strip()
-                sentiment = analysis.get("sentiment", "Neutral").strip()
+                news_link = str(news.get("link") or news.get("url") or "").strip()
+
+                # Perform exact URL lookup instead of index matching
+                analysis = analysis_map.get(news_link, {})
                 
                 try:
                     score = int(analysis.get("importance_score", 3))
                 except (ValueError, TypeError):
                     score = 3
+
+                # Filter out non-financial noise / low-importance articles (Importance < 2)
+                if score < 2:
+                    continue
+
+                summary = analysis.get("summary", "No AI summary available.").strip()
+                sentiment = analysis.get("sentiment", "Neutral").strip()
                 
                 item_text = (
                     f"Title: {title} ({source})\n"
@@ -142,7 +158,7 @@ def format_digest(price_data: List[Dict[str, Any]], news_items: List[Dict[str, A
                     current_chunk.append(item_text)
 
             except Exception as item_err:
-                logging.error(f"Error formatting digest news item at index {idx}: {item_err}")
+                logging.error(f"Error formatting digest news item '{news.get('title')}': {item_err}")
                 continue
 
     # 4. Footer Section
