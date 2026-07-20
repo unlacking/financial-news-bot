@@ -26,7 +26,8 @@ from dotenv import load_dotenv
 # 1. CORE MODULE & ENGINE IMPORTS
 # ==============================================================================
 try:
-    from src.news_collector import collect_news, save_news_locally, local_path_name
+    from src.news_collector import collect_news, save_news_locally
+    from src.formatter import format_alert, format_digest
     from src.price_collector import get_all_market_tickers, collect_prices, save_data_locally as save_prices
     from src.database_client import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, process_news_batch
     from src.alert_engine import analyze_price_alerts, analyze_news_alerts
