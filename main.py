@@ -38,13 +38,40 @@ except ImportError as import_err:
     sys.exit(1)
 
 # ==============================================================================
-# 2. RUNTIME ENVIRONMENT STATE
+# 2. RUNTIME ENVIRONMENT STATE & ALERT DEDUPLICATION TRACKER
 # ==============================================================================
 SYSTEM_STATE = {
     "last_run_time": "Never executed yet",
     "last_run_status": "Idle",
     "scheduler_active": True
 }
+
+# In-memory deduplication registry tracking broadcast alerts sent during the active day
+SENT_ALERTS_CACHE = {
+    "date": datetime.now().strftime("%Y-%m-%d"),
+    "keys": set()
+}
+
+def is_alert_already_sent(alert_key: str) -> bool:
+    """
+    Evaluates whether an alert signature has already been broadcast today.
+    Automatically resets the memory set at midnight.
+    """
+    global SENT_ALERTS_CACHE
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Reset registry on new calendar day
+    if SENT_ALERTS_CACHE["date"] != today:
+        SENT_ALERTS_CACHE["date"] = today
+        SENT_ALERTS_CACHE["keys"].clear()
+        logging.info("New trading calendar day detected. Alert deduplication cache cleared.")
+        
+    if alert_key in SENT_ALERTS_CACHE["keys"]:
+        return True
+        
+    SENT_ALERTS_CACHE["keys"].add(alert_key)
+    return False
+
 
 def check_gemini_analysis(articles: list) -> list:
     """
@@ -221,19 +248,37 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
     try:
         logging.info("Executing Phase 3: Alert Evaluation")
         
+        # 1. Price Alerts Deduplication & Dispatch
         if collected_prices:
             price_alerts = analyze_price_alerts(collected_prices)
             logging.info(f"Price alert criteria scanned. Violations detected: {len(price_alerts)}")
             for alert in price_alerts:
-                formatted_msg = format_alert(alert_type="PRICE_ALERT", ticker=alert["ticker"], detail=alert["message"])
+                ticker = alert["ticker"]
+                # Unique key: DATE + TICKER + ALERT_MESSAGE
+                alert_key = f"PRICE_{date_str}_{ticker}_{alert['message']}"
+                
+                if is_alert_already_sent(alert_key):
+                    logging.info(f"Duplicate price alert suppressed for ticker '{ticker}'. Skipping dispatch.")
+                    continue
+
+                formatted_msg = format_alert(alert_type="PRICE_ALERT", ticker=ticker, detail=alert["message"])
                 send_message(formatted_msg)
                 time.sleep(1.0)
 
+        # 2. Critical News Alerts Deduplication & Dispatch
         if scraped_news and gemini_analyses:
             news_alerts = analyze_news_alerts(scraped_news, gemini_analyses)
             logging.info(f"News alert criteria scanned. Violations detected: {len(news_alerts)}")
             for alert in news_alerts:
                 target_ticker = alert["tickers"][0] if alert.get("tickers") else "MARKET"
+                # Use unique URL/link or headline message as unique alert signature
+                article_ref = alert.get("link") or alert.get("url") or alert["message"]
+                alert_key = f"NEWS_{date_str}_{target_ticker}_{article_ref}"
+                
+                if is_alert_already_sent(alert_key):
+                    logging.info(f"Duplicate news alert suppressed for ticker '{target_ticker}'. Skipping dispatch.")
+                    continue
+
                 formatted_msg = format_alert(alert_type="NEWS_ALERT", ticker=target_ticker, detail=alert["message"])
                 send_message(formatted_msg)
                 time.sleep(1.0)
@@ -248,7 +293,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
         try:
             logging.info("Executing Phase 4: Morning Newsletter Generation and Broadcast")
             
-            # Construct macro market overview payload for the morning digest
+            # Construct dynamic macro market overview payload for the morning digest
             market_macro_payload = get_market_macro_summary()
 
             # 1. Dispatch formatted blocks into Telegram Chat/Channel
