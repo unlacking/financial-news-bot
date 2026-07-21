@@ -4,7 +4,7 @@ MAIN UTILITY ENGINE & ORCHESTRATION PIPELINE
 This script acts as the primary orchestrator for the entire financial news bot ecosystem.
 It executes two primary concurrent flows:
   1. An asynchronous background worker thread running a long-polling Telegram Bot command listener.
-  2. A synchronous clock-based scheduler that handles automated intraday scans and End-of-Day (EOD) digest distributions.
+  2. A synchronous clock-based scheduler that handles automated intraday scans and Start-of-Day (MORNING) digest distributions.
 
 Architecture Flow Overview:
   [News RSS & Ticker Prices] ──> [Gemini AI Filter] ──> [Supabase Cloud Database] ──> [Telegram/Email Alerts]
@@ -28,10 +28,9 @@ from dotenv import load_dotenv
 try:
     from src.news_collector import collect_news, save_news_locally
     from src.formatter import format_alert, format_digest
-    from src.price_collector import get_all_market_tickers, collect_prices, save_data_locally as save_prices
+    from src.price_collector import get_all_market_tickers, get_market_macro_summary, collect_prices, save_data_locally as save_prices
     from src.database_client import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, process_news_batch
     from src.alert_engine import analyze_price_alerts, analyze_news_alerts
-    from src.formatter import format_alert, format_digest
     from src.telegram_bot import send_message, send_bulk_messages, main as start_telegram_bot
     from src.email_client import send_email_digest
 except ImportError as import_err:
@@ -151,7 +150,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
     SYSTEM_STATE["last_run_time"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     SYSTEM_STATE["last_run_status"] = "Processing..."
 
-    if datetime.today().weekday() in [5, 6] and execution_mode != "EOD":
+    if datetime.today().weekday() in [5, 6] and execution_mode != "MORNING":
         logging.info("Market is closed on weekends. Pipeline skipped.")
         SYSTEM_STATE["last_run_status"] = "Skipped (Weekend)"
         return
@@ -243,38 +242,33 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
         logging.error(f"Failed to execute Alert Evaluation Phase: {e}")
 
     # --------------------------------------------------------------------------
-    # --- Phase 4: End of Day Broadcast Summary Delivery (EOD Mode Only) ---
+    # --- Phase 4: Start of Day Broadcast Summary Delivery (MORNING Mode Only) ---
     # --------------------------------------------------------------------------
-    if execution_mode == "EOD":
+    if execution_mode == "MORNING":
         try:
-            logging.info("Executing Phase 4: Newsletter Generation and Broadcast")
+            logging.info("Executing Phase 4: Morning Newsletter Generation and Broadcast")
             
-            # Construct macro market overview payload for the morning/EOD digest
-            market_macro_payload = {
-                "vnindex": "1,245.80",
-                "change_points": -12.35,
-                "liquidity": "21,500 tỷ VNĐ",
-                "foreign_flow": "Bán ròng 185 tỷ VNĐ"
-            }
+            # Construct macro market overview payload for the morning digest
+            market_macro_payload = get_market_macro_summary()
 
             # 1. Dispatch formatted blocks into Telegram Chat/Channel
             digest_chunks = format_digest(
                 price_data=collected_prices, 
                 news_items=scraped_news, 
                 gemini_analyses=gemini_analyses,
-                market_macro=market_macro_payload  # Pass macro market data
+                market_macro=market_macro_payload
             )
             send_bulk_messages(digest_chunks)
-            logging.info("Daily newsletter digest blocks transmitted successfully to Telegram.")
+            logging.info("Morning newsletter digest blocks transmitted successfully to Telegram.")
             
             # 2. Dispatch data arrays to enterprise email workflows
             logging.info("Compiling and dispatching secure HTML SMTP email matrix...")
             send_email_digest(collected_prices, scraped_news, gemini_analyses)
             
-            SYSTEM_STATE["last_run_status"] = "Success (EOD Completed)"
+            SYSTEM_STATE["last_run_status"] = "Success (Morning Completed)"
         except Exception as e:
-            logging.error(f"Failed to transmit Daily Newsletter summary outputs: {e}")
-            SYSTEM_STATE["last_run_status"] = "Error (EOD Broadcast)"
+            logging.error(f"Failed to transmit Morning Newsletter summary outputs: {e}")
+            SYSTEM_STATE["last_run_status"] = "Error (Morning Broadcast)"
     else:
         if "Error" not in SYSTEM_STATE["last_run_status"] and SYSTEM_STATE["last_run_status"] != "Processing...":
             pass
@@ -287,6 +281,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
 # ==============================================================================
 def schedule_intraday_job():
     current_hour = datetime.now().hour
+    # Trading sessions: 09:00 - 11:30 and 13:00 - 15:00
     if 9 <= current_hour <= 15:
         logging.info("Current time is within trading hours. Initializing intraday scan.")
         try:
@@ -301,11 +296,12 @@ def start_scheduler():
     
     schedule.every(2).hours.do(schedule_intraday_job)
     
-    schedule.every().monday.at("16:00").do(run_pipeline, execution_mode="EOD")
-    schedule.every().tuesday.at("16:00").do(run_pipeline, execution_mode="EOD")
-    schedule.every().wednesday.at("16:00").do(run_pipeline, execution_mode="EOD")
-    schedule.every().thursday.at("16:00").do(run_pipeline, execution_mode="EOD")
-    schedule.every().friday.at("16:00").do(run_pipeline, execution_mode="EOD")
+    # Scheduled pre-market Start-of-Day (MORNING) report triggers (08:00 AM)
+    schedule.every().monday.at("08:00").do(run_pipeline, execution_mode="MORNING")
+    schedule.every().tuesday.at("08:00").do(run_pipeline, execution_mode="MORNING")
+    schedule.every().wednesday.at("08:00").do(run_pipeline, execution_mode="MORNING")
+    schedule.every().thursday.at("08:00").do(run_pipeline, execution_mode="MORNING")
+    schedule.every().friday.at("08:00").do(run_pipeline, execution_mode="MORNING")
     
     while True:
         try:
@@ -320,9 +316,9 @@ def start_scheduler():
 # ==============================================================================
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--now":
-        logging.info("Manual system override detected. Running pipeline immediately.")
+        logging.info("Manual system override detected. Running morning pipeline immediately.")
         try:
-            run_pipeline(execution_mode="EOD")
+            run_pipeline(execution_mode="MORNING")
         except Exception as manual_override_err:
             logging.critical(f"Forced pipeline execution failed entirely: {manual_override_err}")
     else:

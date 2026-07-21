@@ -20,7 +20,6 @@ from dotenv import load_dotenv
 # ==============================================================================
 # 1. ENVIRONMENT & PATH RESOLUTION
 # ==============================================================================
-# Resolves the absolute path to the parent directory to safely locate the local .env configuration file
 try:
     current_script_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = os.path.join(current_script_dir, "..", ".env")
@@ -53,15 +52,15 @@ def clean_html(raw_html: str) -> str:
 
 
 # ==============================================================================
-# 3. RSS FEED HARVESTING ENGINE
+# 3. RSS FEED HARVESTING ENGINE (OPTIMIZED FOR MORNING BRIEFINGS)
 # ==============================================================================
-def collect_news(news_amount: int = 5, timeframe: timedelta = timedelta(days=1)) -> list:
+def collect_news(news_amount: int = 10, timeframe: timedelta = timedelta(hours=16)) -> list:
     """
     Connects to external RSS feeds, extracts recent articles within a designated lookback window,
     normalizes localized publication dates, and returns structured dictionaries.
 
     :param news_amount: Maximum number of articles to extract per individual publisher endpoint.
-    :param timeframe: Lookback timedelta threshold (defaults to 24 hours).
+    :param timeframe: Lookback timedelta threshold (defaults to 16 hours to capture overnight news for 8:00 AM briefs).
     :return: List of unique dictionary records formatted for pipeline consumption.
     """
     # Fetch RSS source URLs dynamically from environment variables
@@ -84,17 +83,18 @@ def collect_news(news_amount: int = 5, timeframe: timedelta = timedelta(days=1))
         logging.error(f"Failed to calculate target evaluation timezone window: {time_calc_err}")
         min_allowed_time = datetime.now(timezone.utc) - timeframe
 
-    logging.info(f"Starting financial news scraping cycle (Window: {timeframe}, Max per source: {news_amount})...")
+    logging.info(f"Starting morning news scraping cycle (Lookback: {timeframe}, Max per source: {news_amount})...")
     logging.info(f"Filtering articles published after: {min_allowed_time.strftime('%Y-%m-%d %H:%M:%S')} ICT")
 
     # Spoof browser request headers to prevent HTTP 403 Forbidden responses from RSS endpoints
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
     
-    # Initialize an HTTPX client with a strict 8-second timeout to prevent dead connection hangs
+    # Initialize an HTTPX client with a strict 10-second timeout to prevent dead connection hangs
     try:
-        with httpx.Client(timeout=8.0, follow_redirects=True, headers=headers) as client:
+        with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as client:
             for source_name, url in rss_sources.items():
                 if not url:
                     logging.warning(f"Skipping RSS collection for '{source_name}': URL environment variable is not defined.")
@@ -136,13 +136,16 @@ def collect_news(news_amount: int = 5, timeframe: timedelta = timedelta(days=1))
                         if not article_link:
                             continue
 
-                        # Parse localized RFC-2822 date strings into standard Python datetime objects
+                        # Parse localized RFC-2822 or ISO date strings into standard Python datetime objects
                         if not published_raw:
-                            # Fallback: Assign current time if date tag is omitted in XML feed
                             article_time_vn = datetime.now(timezone_vn)
                         else:
-                            parsed_tuple = email.utils.parsedate_to_datetime(published_raw)
-                            article_time_vn = parsed_tuple.astimezone(timezone_vn)
+                            try:
+                                parsed_tuple = email.utils.parsedate_to_datetime(published_raw)
+                                article_time_vn = parsed_tuple.astimezone(timezone_vn)
+                            except Exception:
+                                # Fallback parser for non-standard RSS timestamps
+                                article_time_vn = datetime.now(timezone_vn)
 
                     except Exception as entry_parse_err:
                         logging.warning(f"Failed to parse metadata for article entry from source '{source_name}': {entry_parse_err}")
@@ -173,6 +176,7 @@ def collect_news(news_amount: int = 5, timeframe: timedelta = timedelta(days=1))
         logging.error(f"Fatal HTTP client session failure during news collection phase: {client_err}")
         return []
 
+    logging.info(f"Morning news extraction complete: Collected {len(news)} overnight articles across all sources.")
     return news
 
 
