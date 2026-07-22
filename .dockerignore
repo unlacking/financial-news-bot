@@ -1,0 +1,10 @@
+.venv
+.venv311
+__pycache__
+*.pyc
+*.pyo
+logs/*.log
+src/news_data/*.json
+src/stock_data/
+.git
+.gitignore

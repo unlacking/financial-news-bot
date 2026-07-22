@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  fin-news-bot:
+    build: .
+    container_name: fin_news_bot_app
+    # Load your local secrets, API keys, and Telegram tokens directly
+    env_file:
+      - .env
+    volumes:
+      # Map logs directory so container logs stay visible on your host machine
+      - ./logs:/app/logs
+      # Map news & stock data caches for local file persistence
+      - ./src/news_data:/app/src/news_data
+      - ./src/stock_data:/app/src/stock_data
+    environment:
+      # Align container time with Vietnam ICT (UTC+7)
+      - TZ=Asia/Ho_Chi_Minh
+    restart: unless-stopped
