@@ -22,6 +22,7 @@ import threading
 import schedule 
 from dotenv import load_dotenv
 
+
 # ==============================================================================
 # 1. CORE MODULE & ENGINE IMPORTS
 # ==============================================================================
@@ -29,7 +30,7 @@ try:
     from src.news_collector import collect_news, save_news_locally
     from src.formatter import format_alert, format_digest
     from src.price_collector import get_all_market_tickers, get_market_macro_summary, collect_prices, save_data_locally as save_prices
-    from src.database_client import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, process_news_batch
+    from src.database_client import insert_json_to_table, NEWS_TABLE, STOCKS_TABLE, process_news_batch, insert_gemini_analyses_direct
     from src.alert_engine import analyze_price_alerts, analyze_news_alerts
     from src.telegram_bot import send_message, send_bulk_messages, main as start_telegram_bot
     from src.email_client import send_email_digest
@@ -218,6 +219,8 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
                         if date_str in file_name and file_name.endswith(".json"):
                             full_p = os.path.join(news_data_dir, file_name)
                             insert_json_to_table(local_file_path=full_p, table_name=NEWS_TABLE)
+                    if gemini_analyses:
+                        insert_gemini_analyses_direct(gemini_analyses)
         else:
             logging.info("No fresh articles harvested during this cycle.")
 

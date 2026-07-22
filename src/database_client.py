@@ -63,6 +63,42 @@ def realign_gemini_payload(gemini_row: dict) -> dict:
 # ==============================================================================
 # 3. DATABASE SCHEMA REALIGNMENT & HTTP UPSERT ENGINE
 # ==============================================================================
+def insert_gemini_analyses_direct(gemini_analyses: list) -> bool:
+    """Directly uploads in-memory Gemini analysis objects to Supabase."""
+    if not URL or not KEY or not gemini_analyses:
+        return False
+
+    parsed_url = urlparse(URL)
+    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    gemini_endpoint = f"{base_url}/rest/v1/{GEMINI_TABLE}?on_conflict=link"
+
+    headers = {
+        "Authorization": f"Bearer {KEY}",
+        "apiKey": KEY,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+
+    payload = [realign_gemini_payload(row) for row in gemini_analyses]
+
+    try:
+        res = httpx.post(
+            gemini_endpoint, headers=headers, json=payload, timeout=10.0
+        )
+        if res.status_code in [200, 201]:
+            logging.info(
+                f"Successfully uploaded {len(payload)} Gemini records to '{GEMINI_TABLE}'."
+            )
+            return True
+        else:
+            logging.error(
+                f"Gemini upload rejected (HTTP {res.status_code}): {res.text}"
+            )
+            return False
+    except Exception as e:
+        logging.error(f"Failed to upload Gemini analyses: {e}")
+        return False
+    
 def insert_json_to_table(local_file_path: str, table_name: str) -> bool:
     """
     Reads local JSON datasets, realigns column schemas for target database tables,
