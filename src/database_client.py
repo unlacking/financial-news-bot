@@ -47,9 +47,9 @@ def realign_gemini_payload(gemini_row: dict) -> dict:
     """
     if not isinstance(gemini_row, dict):
         return {}
-
+    clean_link = str(gemini_row.get("link") or gemini_row.get("url") or "").strip()
     return {
-        "link": str(gemini_row.get("link", "")).strip(),
+        "link": clean_link,
         "prompt_input": str(gemini_row.get("prompt_input", "")),
         "model_name": str(gemini_row.get("model_name", os.getenv("GEMINI_VERSION", "gemini-3.5-flash"))),
         "summary": str(gemini_row.get("summary", "")),

@@ -218,7 +218,7 @@ def process_news_batch(data: list, local_path_name: str = "") -> Tuple[list, lis
     gemini_rows_to_insert = []
     
     BATCH_SIZE = 10  
-    COOLDOWN_PERIOD = 65  # Pause duration in seconds between sub-batches
+    COOLDOWN_PERIOD = 25  # Pause duration in seconds between sub-batches
     
     for i in range(0, len(data), BATCH_SIZE):
         batch = data[i:i + BATCH_SIZE]
@@ -277,7 +277,7 @@ def process_news_batch(data: list, local_path_name: str = "") -> Tuple[list, lis
                 }
                 gemini_rows_to_insert.append(gemini_row)
 
-                time.sleep(1.5)  # Gentle spacing delay between requests
+                time.sleep(4.5)  # Gentle spacing delay between requests
 
             except Exception as item_err:
                 logging.error(f"Error processing news row inside batch: {item_err}")

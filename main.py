@@ -197,8 +197,7 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
         if scraped_news:
             logging.info(f"Successfully harvested {len(scraped_news)} raw articles from RSS feeds.")
 
-            cafef_path = os.path.join(project_root, "src", "news_data", f"CafeF_{date_str}.json")
-            inferred_name = "CafeF" if os.path.exists(cafef_path) else "VnEconomy"
+            
 
             fresh_news = check_gemini_analysis(scraped_news)
 
@@ -207,14 +206,18 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
                 SYSTEM_STATE["last_run_status"] = "Success (No fresh news)"
             else:
                 logging.info(f"Processing {len(fresh_news)} completely new articles through Gemini API...")
-                formatted_news, gemini_analyses = process_news_batch(fresh_news, inferred_name)
+                formatted_news, gemini_analyses = process_news_batch(fresh_news, "RSS_FEEDS")
                 logging.info(f"Generated {len(gemini_analyses)} active Gemini analysis objects.")
 
                 save_news_locally(scraped_news)
                 logging.info("Local news cache updated successfully.")
 
                 if formatted_news:
-                    insert_json_to_table(local_file_path=cafef_path, table_name=NEWS_TABLE)
+                    news_data_dir = os.path.join(project_root, "src", "news_data")
+                    for file_name in os.listdir(news_data_dir):
+                        if date_str in file_name and file_name.endswith(".json"):
+                            full_p = os.path.join(news_data_dir, file_name)
+                            insert_json_to_table(local_file_path=full_p, table_name=NEWS_TABLE)
         else:
             logging.info("No fresh articles harvested during this cycle.")
 
