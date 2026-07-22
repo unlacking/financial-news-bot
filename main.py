@@ -76,9 +76,8 @@ def is_alert_already_sent(alert_key: str) -> bool:
 
 def check_gemini_analysis(articles: list) -> list:
     """
-    Queries Supabase in a single HTTP request to fetch existing links.
-    Returns only the articles that are either missing from the database 
-    or contain an error state requiring a re-run.
+    Queries Supabase to check which article links already exist in gemini_responses.
+    Returns ONLY the articles that are not yet analyzed or had an error.
     """
     if not articles or not isinstance(articles, list):
         return []
@@ -91,8 +90,9 @@ def check_gemini_analysis(articles: list) -> list:
         logging.warning("Supabase configuration missing. Bypassing cloud analysis cache check.")
         return articles
 
-    links = [art.get("url") or art.get("link") for art in articles if (art.get("url") or art.get("link"))]
-    if not links:
+    # 1. Extract valid article links
+    article_map = {art.get("link"): art for art in articles if art.get("link")}
+    if not article_map:
         return []
 
     try:
@@ -102,13 +102,19 @@ def check_gemini_analysis(articles: list) -> list:
 
         headers = {
             "Authorization": f"Bearer {key_env}",
-            "apiKey": key_env
+            "apiKey": key_env,
+            "Content-Type": "application/json"
         }
+
+        # 2. Query Supabase using select and in filter with proper string escaping
+        links_list = list(article_map.keys())
         
-        formatted_links = ",".join([f'"{l}"' for l in links])
+        # Using string representation suitable for PostgREST
+        # Escaping quotes inside links if any
+        formatted_in = "(" + ",".join([f'"{l}"' for l in links_list]) + ")"
         params = {
-            "link": f"in.({formatted_links})",
-            "select": "link,sentiment"
+            "select": "link,sentiment",
+            "link": f"in.{formatted_in}"
         }
 
         response = httpx.get(endpoint, headers=headers, params=params, timeout=8.0)
@@ -118,17 +124,17 @@ def check_gemini_analysis(articles: list) -> list:
             for record in response.json():
                 link = record.get("link")
                 sentiment = str(record.get("sentiment", "")).lower()
+                # If it already exists and doesn't contain an error sentiment, treat as healthy
                 if link and sentiment and "error" not in sentiment:
                     healthy_links.add(link)
+        else:
+            logging.warning(f"Supabase check returned HTTP {response.status_code}: {response.text}")
 
-        unprocessed_news = []
-        for art in articles:
-            art_link = art.get("url") or art.get("link")
-            if art_link not in healthy_links:
-                unprocessed_news.append(art)
+        # 3. Filter out links already present in DB
+        unprocessed_news = [art for link, art in article_map.items() if link not in healthy_links]
 
         skipped_count = len(articles) - len(unprocessed_news)
-        logging.info(f"Cloud DB cache check complete: {skipped_count} healthy records skipped, {len(unprocessed_news)} queued for processing.")
+        logging.info(f"Cloud DB cache check complete: {skipped_count} existing records skipped, {len(unprocessed_news)} queued for Gemini AI.")
         return unprocessed_news
 
     except Exception as db_err:

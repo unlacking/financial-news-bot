@@ -292,45 +292,90 @@ def get_stock_price(ticker: str) -> dict | None:
 
 
 def get_latest_news(ticker: str = None, limit: int = 3) -> list:
-    """
-    Queries the latest news articles from Supabase.
-    If a ticker symbol is supplied, queries the GEMINI_TABLE for matching related_tickers.
-    Otherwise, pulls the latest general market news from NEWS_TABLE.
-    Used by the Telegram bot's /news command handler.
-    """
+    """Queries the latest news articles from Supabase and merges Gemini analysis."""
     if not URL or not KEY:
         return []
     try:
         parsed_url = urlparse(URL)
         base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        
-        headers = {
-            "Authorization": f"Bearer {KEY}",
-            "apiKey": KEY
-        }
-        
-        # Ticker-specific lookup (Query related_tickers array in GEMINI_TABLE)
+
+        headers = {"Authorization": f"Bearer {KEY}", "apiKey": KEY}
+
+        # Case 1: Selected ticker news (Take from GEMINI_TABLE directly)
         if ticker:
             clean_ticker = ticker.strip().upper()
             url = f"{base_url}/rest/v1/{GEMINI_TABLE}"
             params = {
                 "select": "link,summary,sentiment,related_tickers,affected_sectors,importance_score",
-                "related_tickers": f"cs.{{{clean_ticker}}}",  # PostgREST array containment filter
-                "limit": limit
+                "related_tickers": f"cs.{{{clean_ticker}}}",
+                "limit": limit,
             }
-        # General market news feed snapshot
+            response = httpx.get(url, headers=headers, params=params, timeout=5.0)
+            if response.status_code == 200:
+                return response.json() if isinstance(response.json(), list) else []
+            return []
+
+        # Case 2: General news (Fetch from NEWS_TABLE and merge with Gemini analysis)
         else:
-            url = f"{base_url}/rest/v1/{NEWS_TABLE}"
-            params = {
-                "order": "published_at.desc",
-                "limit": limit
+            news_url = f"{base_url}/rest/v1/{NEWS_TABLE}"
+            news_params = {"order": "published_at.desc", "limit": limit}
+            news_res = httpx.get(
+                news_url, headers=headers, params=news_params, timeout=5.0
+            )
+
+            if news_res.status_code != 200:
+                return []
+
+            articles = news_res.json()
+            if not isinstance(articles, list) or not articles:
+                return []
+
+            # Get links from the articles to query Gemini table
+            links = [
+                art.get("link")
+                for art in articles
+                if isinstance(art, dict) and art.get("link")
+            ]
+            if not links:
+                return articles
+
+            formatted_links = ",".join([f'"{l}"' for l in links])
+            gemini_url = f"{base_url}/rest/v1/{GEMINI_TABLE}"
+            gemini_params = {
+                "select": "link,sentiment,importance_score,affected_sectors",
+                "link": f"in.({formatted_links})",
             }
-            
-        response = httpx.get(url, headers=headers, params=params, timeout=5.0)
-        if response.status_code == 200:
-            data = response.json()
-            return data if isinstance(data, list) else []
-        return []
+            gemini_res = httpx.get(
+                gemini_url, headers=headers, params=gemini_params, timeout=5.0
+            )
+
+            # Build a mapping of link to Gemini analysis for quick lookup
+            gemini_map = {}
+            if gemini_res.status_code == 200 and isinstance(
+                gemini_res.json(), list
+            ):
+                for item in gemini_res.json():
+                    if item.get("link"):
+                        gemini_map[item["link"]] = item
+
+            merged_articles = []
+            for art in articles:
+                link = art.get("link")
+                gemini_info = gemini_map.get(link, {})
+
+                art["sentiment"] = gemini_info.get("sentiment", "Neutral")
+                art["importance_score"] = gemini_info.get(
+                    "importance_score", 3
+                )
+                art["affected_sectors"] = gemini_info.get(
+                    "affected_sectors", []
+                )
+                merged_articles.append(art)
+
+            return merged_articles
+
     except Exception as e:
-        logging.error(f"Failed to query latest news articles from Supabase: {e}")
+        logging.error(
+            f"Failed to query latest news articles from Supabase: {e}"
+        )
         return []
