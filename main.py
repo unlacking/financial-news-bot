@@ -204,8 +204,6 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
         if scraped_news:
             logging.info(f"Successfully harvested {len(scraped_news)} raw articles from RSS feeds.")
 
-            
-
             fresh_news = check_gemini_analysis(scraped_news)
 
             if not fresh_news:
@@ -273,7 +271,11 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
                     logging.info(f"Duplicate price alert suppressed for ticker '{ticker}'. Skipping dispatch.")
                     continue
 
-                formatted_msg = format_alert(alert_type="PRICE_ALERT", ticker=ticker, detail=alert["message"])
+                formatted_msg = format_alert(
+                    alert_type="PRICE_ALERT", 
+                    ticker=ticker, 
+                    summary=alert["message"]
+                )
                 send_message(formatted_msg)
                 time.sleep(1.0)
 
@@ -282,16 +284,22 @@ def run_pipeline(execution_mode: str = "INTRADAY"):
             news_alerts = analyze_news_alerts(scraped_news, gemini_analyses)
             logging.info(f"News alert criteria scanned. Violations detected: {len(news_alerts)}")
             for alert in news_alerts:
-                target_ticker = alert["tickers"][0] if alert.get("tickers") else "MARKET"
+                target_ticker = alert.get("ticker") or (alert["tickers"][0] if alert.get("tickers") else "MARKET")
                 # Use unique URL/link or headline message as unique alert signature
-                article_ref = alert.get("link") or alert.get("url") or alert["message"]
+                article_ref = alert.get("link") or alert.get("url") or alert.get("title", "")
                 alert_key = f"NEWS_{date_str}_{target_ticker}_{article_ref}"
                 
                 if is_alert_already_sent(alert_key):
                     logging.info(f"Duplicate news alert suppressed for ticker '{target_ticker}'. Skipping dispatch.")
                     continue
 
-                formatted_msg = format_alert(alert_type="NEWS_ALERT", ticker=target_ticker, detail=alert["message"])
+                formatted_msg = format_alert(
+                    alert_type="NEWS_ALERT", 
+                    ticker=target_ticker, 
+                    title=alert.get("title", ""), 
+                    summary=alert.get("summary", ""), 
+                    reason=alert.get("reason", "")
+                )
                 send_message(formatted_msg)
                 time.sleep(1.0)
 
