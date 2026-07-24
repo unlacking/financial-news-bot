@@ -117,7 +117,7 @@ def format_digest(
     if gemini_analyses and isinstance(gemini_analyses, list):
         for item in gemini_analyses:
             if isinstance(item, dict):
-                senti = str(item.get("sentiment", "Neutral")).capitalize()
+                senti = str(item.get("sentiment", "errorTOKEN")).capitalize()
                 if senti in sentiments_count:
                     sentiments_count[senti] += 1
                 
@@ -174,7 +174,7 @@ def format_digest(
             title = news.get("title", "Untitled Article").strip()
             source = news.get("source", "Unknown").strip()
             summary = analysis.get("summary", "No summary available.").strip()
-            sentiment = analysis.get("sentiment", "Neutral").strip()
+            sentiment = analysis.get("sentiment", "errorTOKEN").strip()
             
             try:
                 score = int(analysis.get("importance_score", 3))

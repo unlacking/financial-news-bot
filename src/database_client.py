@@ -363,7 +363,7 @@ def get_latest_news(ticker: str = None, limit: int = 3) -> list:
                 link = art.get("link")
                 gemini_info = gemini_map.get(link, {})
 
-                art["sentiment"] = gemini_info.get("sentiment", "Neutral")
+                art["sentiment"] = gemini_info.get("sentiment", "errorTOKEN")
                 art["importance_score"] = gemini_info.get(
                     "importance_score", 3
                 )
