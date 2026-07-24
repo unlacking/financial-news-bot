@@ -160,16 +160,12 @@ def analyze_news_alerts(news_items: List[Dict[str, Any]], gemini_analyses: List[
                 if found_keywords:
                     reasons.append(f"Contains sensitive keywords: {', '.join(found_keywords)}")
                     
-                ticker_str = f" related to {', '.join(tickers)}" if tickers else ""
                 alerts.append({
                     "type": "NEWS_ALERT",
-                    "tickers": tickers,
-                    "message": (
-                        f"**EMERGENCY NEWS ALERT**{ticker_str}\n"
-                        f"**Title:** {title}\n"
-                        f"**Reason:** {'; '.join(reasons)}\n"
-                        f"**Summary:** {summary}"
-                    )
+                    "ticker": ", ".join(tickers) if tickers else "MARKET",
+                    "title": title,
+                    "reason": "; ".join(reasons),
+                    "summary": summary
                 })
 
         except Exception as e:

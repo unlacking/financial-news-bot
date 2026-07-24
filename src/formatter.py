@@ -2,7 +2,13 @@ from typing import List, Dict, Any
 from datetime import datetime
 import logging
 
-def format_alert(alert_type: str, ticker: str, detail: str, reason: str = "") -> str:
+def format_alert(
+    alert_type: str, 
+    ticker: str, 
+    title: str = "", 
+    summary: str = "", 
+    reason: str = ""
+) -> str:
     """
     Format emergency alerts (price variations or critical news).
     Uses professional ASCII layouts instead of emojis.
@@ -11,30 +17,37 @@ def format_alert(alert_type: str, ticker: str, detail: str, reason: str = "") ->
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     if alert_type == "PRICE_ALERT":
+        summary_line = f"Detail: {summary}\n" if summary else ""
         message = (
             f"{separator}\n"
             f"MARKET ALERT: {ticker}\n"
             f"{separator}\n"
-            f"Detail: {detail}\n"
+            f"{summary_line}"
             f"Timestamp: {current_time}\n"
             f"{separator}"
         )
     elif alert_type == "NEWS_ALERT":
+        reason_line = f"Reason: {reason}\n" if reason else ""
+        title_line = f"Title: {title}\n" if title else ""
+        summary_line = f"Summary: {summary}\n" if summary else ""
+        
         message = (
             f"{separator}\n"
             f"CRITICAL NEWS ALERT: {ticker}\n"
             f"{separator}\n"
-            f"Reason: {reason}\n\n"
-            f"Content: {detail}\n"
+            f"{reason_line}"
+            f"{title_line}"
+            f"{summary_line}"
             f"Timestamp: {current_time}\n"
             f"{separator}"
         )
     else:
+        summary_line = f"Detail: {summary}\n" if summary else ""
         message = (
             f"{separator}\n"
             f"SYSTEM ALERT: {ticker}\n"
             f"{separator}\n"
-            f"{detail}\n"
+            f"{summary_line}"
             f"Timestamp: {current_time}\n"
             f"{separator}"
         )
